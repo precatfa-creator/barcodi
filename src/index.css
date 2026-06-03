@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Cairo", system-ui, sans-serif;
+  --color-primary-dark: #35858E;
+  --color-primary-main: #7DA78C;
+  --color-primary-light: #C2D099;
+  --color-primary-pale: #E6EEC9;
+}
+
+@keyframes laser-sweep {
+  0% {
+    top: 0%;
+    opacity: 0.3;
+  }
+  50% {
+    top: 100%;
+    opacity: 1;
+  }
+  100% {
+    top: 0%;
+    opacity: 0.3;
+  }
+}
+
+.animate-laser {
+  animation: laser-sweep 2.5s ease-in-out infinite;
+}
+
+body {
+  font-family: var(--font-sans);
+  direction: rtl;
+  background-color: #f8fafc;
+  background-image: 
+    radial-gradient(at 0% 0%, hsla(186,46%,85%,1) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(141,24%,85%,1) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(75,39%,85%,1) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, hsla(68,54%,90%,1) 0px, transparent 50%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}

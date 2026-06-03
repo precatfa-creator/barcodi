@@ -1,0 +1,100 @@
+import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { Product, StoreSettings } from './types';
+
+interface AppContextProps {
+  products: Product[];
+  setProducts: (products: Product[]) => void;
+  storeSettings: StoreSettings;
+  setStoreSettings: (settings: StoreSettings) => void;
+  loadStoreData: (storeId: string) => Promise<void>;
+  loading: boolean;
+}
+
+const defaultStoreSettings: StoreSettings = {
+  name: 'جاري التحميل...',
+  logoUrl: null,
+  currency: 'ر.س',
+};
+
+const AppContext = createContext<AppContextProps | undefined>(undefined);
+
+export const AppProvider = ({ children }: { children: ReactNode }) => {
+  const [products, setProductsState] = useState<Product[]>([]);
+  const [storeSettings, setStoreSettingsState] = useState<StoreSettings>(defaultStoreSettings);
+  const [loading, setLoading] = useState(false);
+
+  const loadStoreData = async (storeId: string) => {
+    setLoading(true);
+    try {
+      const [storeRes, productsRes] = await Promise.all([
+        fetch(`/api/public/store/${storeId}`),
+        fetch(`/api/public/products/${storeId}`)
+      ]);
+      
+      if (storeRes.ok) {
+        const storeData = await storeRes.json();
+        if (storeData.storeName) {
+           setStoreSettingsState(prev => ({
+             ...prev,
+             name: storeData.storeName,
+             logoUrl: storeData.storeLogo || null,
+             visits: storeData.visits || prev.visits
+           }));
+        }
+      }
+      
+      if (productsRes.ok) {
+        const productsData = await productsRes.json();
+        if (productsData && productsData.length > 0) {
+          setProductsState(productsData);
+        } else {
+          setProductsState([]);
+        }
+      } else {
+         setProductsState([]);
+      }
+    } catch(e) {
+      setProductsState([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const setProducts = async (newProducts: Product[]) => {
+    setProductsState(newProducts);
+    const token = localStorage.getItem('adminToken');
+    if (token) {
+       await fetch('/api/admin/products', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+         body: JSON.stringify({ products: newProducts })
+       });
+    }
+  };
+
+  const setStoreSettings = async (newSettings: StoreSettings) => {
+    setStoreSettingsState(newSettings);
+    const token = localStorage.getItem('adminToken');
+    if (token) {
+       await fetch('/api/admin/store', {
+         method: 'PUT',
+         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+         body: JSON.stringify({ storeName: newSettings.name, storeLogo: newSettings.logoUrl })
+       });
+    }
+  };
+
+  return (
+    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, loading }}>
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useAppContext = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useAppContext must be used within an AppProvider');
+  }
+  return context;
+};

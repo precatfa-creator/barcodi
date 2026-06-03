@@ -1,0 +1,6 @@
+{
+  "name": "سكانر المحل - قارئ الأسعار",
+  "description": "تطبيق ويب ذكي للمتسوقين داخل المتجر لقراءة أسعار المنتجات ومراقبة ميزانية السلة التقديرية فوراً وبسهولة.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
