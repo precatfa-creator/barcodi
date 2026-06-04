@@ -29,7 +29,7 @@ export default function AdminDashboard({ onLogout }: Props) {
           if (res.ok) {
             const data = await res.json();
             setStoreId(data.storeId);
-            setIsAdmin(data.username === 'admin' || data.username === 'administrator');
+            setIsAdmin(data.username === 'admin' || data.username === 'administrator' || data.username === 'commander');
             await loadStoreData(data.storeId);
           }
         } catch (e) {}
@@ -131,7 +131,7 @@ function Overview({ storeId }: { storeId: string | null }) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white justify-between rounded-2xl p-8 border border-gray-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
+      <div className="bg-white justify-between rounded-2xl p-8 border border-gray-100 shadow-sm flex flex-col lg:flex-row items-center gap-6">
         <div className="text-center md:text-right flex-1">
           <Store className="w-16 h-16 text-gray-300 mx-auto md:mx-0 mb-4" />
           <h2 className="text-2xl font-black text-gray-900 mb-2">مرحباً بك في لوحة تحكم المتجر</h2>
@@ -141,12 +141,12 @@ function Overview({ storeId }: { storeId: string | null }) {
         </div>
         
         {/* Statistics Widgets */}
-        <div className="flex gap-4 w-full md:w-auto mt-6 md:mt-0">
-          <div className="flex-1 md:w-32 bg-gray-50 border border-gray-100 rounded-2xl p-6 text-center">
+        <div className="flex gap-4 w-full lg:w-auto mt-6 lg:mt-0">
+          <div className="flex-1 lg:w-32 bg-gray-50 border border-gray-100 rounded-2xl p-6 text-center">
             <div className="text-3xl font-black text-primary-main mb-1">{products.length}</div>
             <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">الأصناف مسجلة</div>
           </div>
-          <div className="flex-1 md:w-32 bg-gray-50 border border-gray-100 rounded-2xl p-6 text-center">
+          <div className="flex-1 lg:w-32 bg-gray-50 border border-gray-100 rounded-2xl p-6 text-center">
             <div className="text-3xl font-black text-blue-600 mb-1">{storeSettings.visits || 0}</div>
             <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">زيارات العملاء</div>
           </div>

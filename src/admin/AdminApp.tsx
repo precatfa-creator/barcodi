@@ -21,11 +21,11 @@ export default function AdminApp() {
         navigate('/admin/dashboard');
       } else {
         const err = await res.json();
-        alert(err.error || 'بيانات الدخول غير صحيحة');
+        throw new Error(err.error || 'بيانات الدخول غير صحيحة');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('خطأ في الاتصال بالخادم');
+      throw new Error(e.message || 'خطأ في الاتصال بالخادم');
     }
   };
 

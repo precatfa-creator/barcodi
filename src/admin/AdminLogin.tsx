@@ -1,19 +1,29 @@
 import { useState, type FormEvent } from 'react';
-import { Store, ArrowRight, ShieldCheck, LogIn, MessageCircle } from 'lucide-react';
+import { Store, ArrowRight, ShieldCheck, LogIn, MessageCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface Props {
-  onLogin: (user: string, pass: string) => void;
+  onLogin: (user: string, pass: string) => Promise<void>;
 }
 
 export default function AdminLogin({ onLogin }: Props) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    onLogin(username, password);
+    setErrorMsg('');
+    setIsLoading(true);
+    try {
+      await onLogin(username, password);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'بيانات الدخول غير صحيحة');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -40,6 +50,13 @@ export default function AdminLogin({ onLogin }: Props) {
             أدخل بيانات حساب المتجر للمتابعة
           </p>
 
+          {errorMsg && (
+            <div className="mb-6 bg-red-50 text-red-600 px-4 py-3 rounded-xl flex items-center gap-3 text-sm font-bold border border-red-100 animate-in slide-in-from-top-2">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">اسم المستخدم</label>
@@ -48,7 +65,8 @@ export default function AdminLogin({ onLogin }: Props) {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 text-gray-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary-main focus:border-transparent outline-none transition-all mb-4"
+                disabled={isLoading}
+                className="w-full bg-gray-50 border border-gray-200 text-gray-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary-main focus:border-transparent outline-none transition-all mb-4 disabled:opacity-50"
                 placeholder="أدخل اسم المستخدم"
                 autoFocus
               />
@@ -58,17 +76,28 @@ export default function AdminLogin({ onLogin }: Props) {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 text-gray-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary-main focus:border-transparent outline-none transition-all"
+                disabled={isLoading}
+                className="w-full bg-gray-50 border border-gray-200 text-gray-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary-main focus:border-transparent outline-none transition-all disabled:opacity-50"
                 placeholder="أدخل كلمة المرور"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-primary-dark hover:bg-gray-900 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-95"
+              disabled={isLoading}
+              className="w-full bg-primary-dark hover:bg-gray-900 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <LogIn className="w-5 h-5" />
-              <span>تسجيل الدخول</span>
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>جاري التحقق...</span>
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-5 h-5" />
+                  <span>تسجيل الدخول</span>
+                </>
+              )}
             </button>
           </form>
 

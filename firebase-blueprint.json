@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "Store": {
+      "title": "Store",
+      "description": "Store profile structure",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "storeName": { "type": "string" },
+        "storeLogo": { "type": "string" },
+        "visits": { "type": "integer" }
+      },
+      "required": ["id", "username", "password", "storeName"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Store catalog product item",
+      "type": "object",
+      "properties": {
+        "barcode": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" }
+      },
+      "required": ["barcode", "name", "price"]
+    }
+  },
+  "firestore": {
+    "stores/{storeId}": {
+      "schema": "Store",
+      "description": "Registry of retail stores"
+    },
+    "stores/{storeId}/products/{productId}": {
+      "schema": "Product",
+      "description": "Stores subcollection of barcode catalog products"
+    }
+  }
+}
