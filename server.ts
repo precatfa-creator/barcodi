@@ -5,45 +5,228 @@ import fs from 'fs';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
-import { initializeApp } from 'firebase/app';
-import { initializeFirestore, doc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import crypto from 'crypto';
+import { initializeApp as initializeAdminApp, cert, applicationDefault } from 'firebase-admin/app';
+import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
-dotenv.config();
+dotenv.config({ path: ['.env.local', '.env'] });
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
+const isProduction = process.env.NODE_ENV === 'production';
 
-app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Allow larger JSON for excels
+const requiredProductionEnv = ['JWT_SECRET', 'ADMIN_USERNAME', 'ADMIN_PASSWORD'];
+const missingProductionEnv = requiredProductionEnv.filter((key) => !process.env[key]);
+if (isProduction && missingProductionEnv.length > 0) {
+  throw new Error(`Missing required production environment variables: ${missingProductionEnv.join(', ')}`);
+}
+
+const allowedOrigins = (process.env.CORS_ORIGIN || process.env.APP_URL || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: isProduction ? allowedOrigins : true,
+}));
+app.use(express.json({ limit: '5mb' }));
 
 // Setup our simple in-memory DB or fallback to file
 const DB_PATH = path.join(process.cwd(), 'data', 'db.json');
+const shouldUseSeedDb = !isProduction || process.env.USE_SEED_DB === 'true';
+const PASSWORD_SCHEME = 'pbkdf2_sha256';
+const PASSWORD_ITERATIONS = 310000;
+const MAX_PRODUCTS_PER_STORE = Number(process.env.MAX_PRODUCTS_PER_STORE || 5000);
+
+const devJwtSecret = crypto.randomBytes(32).toString('hex');
+const JWT_SECRET = process.env.JWT_SECRET || devJwtSecret;
+if (!process.env.JWT_SECRET) {
+  console.warn('JWT_SECRET is not set. A temporary development-only JWT secret will be used for this process.');
+}
+
+const getBootstrapAdmin = () => ({
+  username: process.env.ADMIN_USERNAME?.trim() || 'commander',
+  password: process.env.ADMIN_PASSWORD || 'change-this-local-admin-password',
+});
+
+if (!isProduction && (!process.env.ADMIN_USERNAME || !process.env.ADMIN_PASSWORD)) {
+  console.warn('ADMIN_USERNAME/ADMIN_PASSWORD are not set. Using local development bootstrap credentials only.');
+}
+
+const hashPassword = (password: string) => {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, PASSWORD_ITERATIONS, 32, 'sha256').toString('hex');
+  return `${PASSWORD_SCHEME}$${PASSWORD_ITERATIONS}$${salt}$${hash}`;
+};
+
+const verifyPassword = (password: string, passwordHash: string) => {
+  const [scheme, iterationsRaw, salt, expectedHash] = passwordHash.split('$');
+  if (scheme !== PASSWORD_SCHEME || !iterationsRaw || !salt || !expectedHash) return false;
+
+  const iterations = Number(iterationsRaw);
+  if (!Number.isInteger(iterations) || iterations < 100000) return false;
+
+  const actual = crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256');
+  const expected = Buffer.from(expectedHash, 'hex');
+  return expected.length === actual.length && crypto.timingSafeEqual(actual, expected);
+};
+
+const sanitizeText = (value: unknown, maxLength: number) => {
+  if (typeof value !== 'string') return '';
+  return value.trim().slice(0, maxLength);
+};
+
+const validateUsername = (username: unknown) => {
+  const normalized = sanitizeText(username, 64).toLowerCase();
+  return /^[a-z0-9._-]{3,64}$/.test(normalized) ? normalized : null;
+};
+
+const validatePasswordInput = (password: unknown) => {
+  if (typeof password !== 'string') return null;
+  return password.length >= 8 && password.length <= 128 ? password : null;
+};
+
+const validateStoreLogo = (logo: unknown) => {
+  if (logo === undefined || logo === null || logo === '') return '';
+  if (typeof logo !== 'string') return null;
+  if (logo.length > 750000) return null;
+  if (/^https:\/\/[^\s]+$/i.test(logo) || /^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,/i.test(logo)) {
+    return logo;
+  }
+  return null;
+};
+
+const normalizeProduct = (raw: any, index: number): ProductRecord | null => {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const name = sanitizeText(raw.name, 160);
+  const barcode = sanitizeText(raw.barcode, 80);
+  const price = Number(raw.price);
+  if (!name || !barcode || !Number.isFinite(price) || price < 0 || price > 1000000) return null;
+
+  const imageUrl = raw.imageUrl === undefined || raw.imageUrl === ''
+    ? undefined
+    : validateStoreLogo(raw.imageUrl);
+  if (imageUrl === null) return null;
+
+  const stock = raw.stock === undefined || raw.stock === null || raw.stock === ''
+    ? undefined
+    : Number(raw.stock);
+  if (stock !== undefined && (!Number.isFinite(stock) || stock < 0 || stock > 100000000)) return null;
+
+  const calories = raw.calories === undefined || raw.calories === null || raw.calories === ''
+    ? undefined
+    : Number(raw.calories);
+  if (calories !== undefined && (!Number.isFinite(calories) || calories < 0 || calories > 1000000)) return null;
+
+  return {
+    id: sanitizeText(raw.id, 80) || crypto.randomUUID(),
+    name,
+    barcode,
+    price,
+    category: sanitizeText(raw.category, 80) || 'general',
+    description: sanitizeText(raw.description, 500),
+    imageEmoji: sanitizeText(raw.imageEmoji, 16) || 'box',
+    imageUrl: imageUrl || undefined,
+    stock,
+    calories,
+    weight: sanitizeText(raw.weight, 50) || undefined,
+  };
+};
+
+const normalizeProducts = (products: unknown) => {
+  if (!Array.isArray(products) || products.length > MAX_PRODUCTS_PER_STORE) return null;
+  const normalized = products.map(normalizeProduct);
+  if (normalized.some((product) => product === null)) return null;
+  return normalized as ProductRecord[];
+};
+
+const publicStoreDocument = (store: StoreRecord) => ({
+  id: store.id,
+  storeName: store.storeName,
+  storeLogo: store.storeLogo || '',
+  products: store.products || [],
+  visits: store.visits || 0,
+  updatedAt: new Date().toISOString(),
+});
+
+const privateStoreDocument = (store: StoreRecord) => ({
+  id: store.id,
+  username: store.username,
+  passwordHash: store.passwordHash,
+  storeName: store.storeName,
+  storeLogo: store.storeLogo || '',
+  products: store.products || [],
+  visits: store.visits || 0,
+  updatedAt: new Date().toISOString(),
+});
+
+const migrateStoreCredentials = (store: StoreRecord) => {
+  if (!store.passwordHash && store.password) {
+    store.passwordHash = hashPassword(store.password);
+  }
+  delete store.password;
+};
+
+const requireCommander = (req: any, res: any, next: any) => {
+  const user = req.user;
+  if (user?.storeId !== 'default' && user?.role !== 'commander') {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+  next();
+};
 
 // Ensure data folder exists
 if (!fs.existsSync(path.join(process.cwd(), 'data'))) {
   fs.mkdirSync(path.join(process.cwd(), 'data'), { recursive: true });
 }
 
+type StoreRecord = {
+  id: string;
+  username: string;
+  password?: string;
+  passwordHash?: string;
+  storeName: string;
+  storeLogo: string;
+  products: ProductRecord[];
+  visits?: number;
+};
+
+type ProductRecord = {
+  id: string;
+  name: string;
+  barcode: string;
+  price: number;
+  category: string;
+  description: string;
+  imageEmoji: string;
+  imageUrl?: string;
+  stock?: number;
+  calories?: number;
+  weight?: string;
+};
+
 let db: {
-  stores: Record<string, any>;
+  stores: Record<string, StoreRecord>;
 } = {
   stores: {}
 };
 
 // Seed initial old DB if existed for migration (optional)
 try {
-  if (fs.existsSync(DB_PATH)) {
+  if (shouldUseSeedDb && fs.existsSync(DB_PATH)) {
     const rawData = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
     if (rawData.stores) {
       db = rawData;
     } else {
       // Migrate old data
+      const bootstrapAdmin = getBootstrapAdmin();
       db = {
         stores: {
           'default': {
             id: 'default',
-            username: 'commander',
-            password: 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y',
+            username: bootstrapAdmin.username,
+            passwordHash: hashPassword(bootstrapAdmin.password),
             storeName: rawData.storeName || "سوبر ماركت السلام",
             storeLogo: rawData.storeLogo || "",
             products: rawData.products || []
@@ -58,10 +241,11 @@ try {
 
   // Ensure there's at least one store (the default admin account) populated
   if (Object.keys(db.stores).length === 0) {
+    const bootstrapAdmin = getBootstrapAdmin();
     db.stores['default'] = {
       id: 'default',
-      username: 'commander',
-      password: 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y',
+      username: bootstrapAdmin.username,
+      passwordHash: hashPassword(bootstrapAdmin.password),
       storeName: "باركودي - الإدارة العامة",
       storeLogo: "",
       products: [],
@@ -70,11 +254,44 @@ try {
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
   }
 
-  // Enforce updating the default credentials if they already existed with old presets
-  if (db.stores['default']) {
-    db.stores['default'].username = 'commander';
-    db.stores['default'].password = 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y';
-    db.stores['default'].storeName = "باركودي - الإدارة العامة";
+  let migratedData = false;
+  for (const store of Object.values(db.stores)) {
+    if (store.password) migratedData = true;
+    migrateStoreCredentials(store);
+    const normalizedProducts = normalizeProducts(store.products || []) || [];
+    const normalizedLogo = validateStoreLogo(store.storeLogo) || '';
+    const normalizedStoreName = sanitizeText(store.storeName, 120) || 'Store';
+    const normalizedUsername = validateUsername(store.username) || store.username;
+
+    if (
+      JSON.stringify(store.products || []) !== JSON.stringify(normalizedProducts) ||
+      store.storeLogo !== normalizedLogo ||
+      store.storeName !== normalizedStoreName ||
+      store.username !== normalizedUsername
+    ) {
+      migratedData = true;
+    }
+
+    store.products = normalizedProducts;
+    store.storeLogo = normalizedLogo;
+    store.storeName = normalizedStoreName;
+    store.username = normalizedUsername;
+  }
+
+  if (db.stores['default'] && process.env.ADMIN_USERNAME && process.env.ADMIN_PASSWORD) {
+    const bootstrapAdmin = getBootstrapAdmin();
+    const defaultStore = db.stores['default'];
+    if (defaultStore.username !== bootstrapAdmin.username) {
+      defaultStore.username = bootstrapAdmin.username;
+      migratedData = true;
+    }
+    if (!defaultStore.passwordHash || !verifyPassword(bootstrapAdmin.password, defaultStore.passwordHash)) {
+      defaultStore.passwordHash = hashPassword(bootstrapAdmin.password);
+      migratedData = true;
+    }
+  }
+
+  if (migratedData) {
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
   }
 } catch (e) {
@@ -84,23 +301,36 @@ try {
 // ----------------------------------------------------
 // FIREBASE FIRESTORE SYNC & MIGRATION ENGINE
 // ----------------------------------------------------
-let firestoreDb: any = null;
+let firestoreDb: Firestore | null = null;
 const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
+const hasFirebaseAdminCredentials = Boolean(
+  process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
+  process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+  isProduction
+);
 
-if (fs.existsSync(firebaseConfigPath)) {
+if (fs.existsSync(firebaseConfigPath) && hasFirebaseAdminCredentials) {
   try {
     const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf-8'));
-    const firebaseApp = initializeApp(firebaseConfig);
-    const dbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId.trim() !== "" 
-      ? firebaseConfig.firestoreDatabaseId 
+    const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+      ? cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY))
+      : applicationDefault();
+
+    initializeAdminApp({
+      credential: serviceAccount,
+      projectId: firebaseConfig.projectId,
+    });
+
+    const dbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId.trim() !== ""
+      ? firebaseConfig.firestoreDatabaseId
       : undefined;
-    firestoreDb = dbId 
-      ? initializeFirestore(firebaseApp, { experimentalForceLongPolling: true }, dbId)
-      : initializeFirestore(firebaseApp, { experimentalForceLongPolling: true });
-    console.log("🔥 Successfully connected to Firebase cloud!");
+    firestoreDb = dbId ? getFirestore(dbId) : getFirestore();
+    console.log("Successfully connected to Firebase Admin Firestore.");
   } catch (err) {
-    console.error("❌ Failed to initialize Firebase app:", err);
+    console.warn("Firebase Admin Firestore is not configured; running with local file storage only.", err);
   }
+} else if (fs.existsSync(firebaseConfigPath)) {
+  console.log("Firebase Admin credentials not configured; running with local file storage only.");
 }
 
 const saveStoreToFirestore = async (storeId: string) => {
@@ -108,85 +338,77 @@ const saveStoreToFirestore = async (storeId: string) => {
   try {
     const storeData = db.stores[storeId];
     if (storeData) {
-      await setDoc(doc(firestoreDb, 'stores', storeId), storeData);
+      await firestoreDb.collection('privateStores').doc(storeId).set(privateStoreDocument(storeData));
+      await firestoreDb.collection('stores').doc(storeId).set(publicStoreDocument(storeData));
     } else {
-      await deleteDoc(doc(firestoreDb, 'stores', storeId));
+      await firestoreDb.collection('privateStores').doc(storeId).delete();
+      await firestoreDb.collection('stores').doc(storeId).delete();
     }
   } catch (err) {
-    console.error(`❌ Failed to sync store ${storeId} to Firestore:`, err);
+    console.error(`Failed to sync store ${storeId} to Firestore:`, err);
   }
 };
 
-const loadDbFromFirestore = async () => {
+const publishAllStoresToFirestore = async () => {
   if (!firestoreDb) return;
   try {
-    const querySnapshot = await getDocs(collection(firestoreDb, 'stores'));
-    let cloudStoresCount = 0;
-    querySnapshot.forEach((docSnap) => {
-      db.stores[docSnap.id] = docSnap.data();
-      cloudStoresCount++;
-    });
-
-    // Enforce that 'default' (Commander) is ALWAYS safely initialized in db.stores 
-    if (!db.stores['default']) {
-      db.stores['default'] = {
-        id: 'default',
-        username: 'commander',
-        password: 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y',
-        storeName: "باركودي - الإدارة العامة",
-        storeLogo: "",
-        products: [],
-        visits: 0
-      };
-      if (firestoreDb) {
-        await setDoc(doc(firestoreDb, 'stores', 'default'), db.stores['default']);
-      }
-    } else {
-      // Enforce the default admin credentials and store name even if loaded from old firestore data
-      const expectedUser = 'commander';
-      const expectedPass = 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y';
-      const expectedName = "باركودي - الإدارة العامة";
-      if (
-        db.stores['default'].username !== expectedUser || 
-        db.stores['default'].password !== expectedPass || 
-        db.stores['default'].storeName !== expectedName
-      ) {
-        db.stores['default'].username = expectedUser;
-        db.stores['default'].password = expectedPass;
-        db.stores['default'].storeName = expectedName;
-        if (firestoreDb) {
-          await setDoc(doc(firestoreDb, 'stores', 'default'), db.stores['default']);
-        }
-        console.log("☁️ Updated old default admin credentials or store name in Firestore.");
-      }
+    const batch = firestoreDb.batch();
+    for (const [storeId, storeData] of Object.entries(db.stores)) {
+      batch.set(firestoreDb.collection('privateStores').doc(storeId), privateStoreDocument(storeData));
+      batch.set(firestoreDb.collection('stores').doc(storeId), publicStoreDocument(storeData));
     }
-
-    if (cloudStoresCount === 0) {
-      console.log("☁️ Cloud database is empty. Uploading current local seed data to Cloud Firestore...");
-      // Seed Cloud Firestore with existing local database stores
-      for (const [storeId, storeData] of Object.entries(db.stores)) {
-        await setDoc(doc(firestoreDb, 'stores', storeId), storeData);
-      }
-      console.log("☁️ Seeding Cloud Firestore completed successfully!");
-    }
+    await batch.commit();
+    console.log("Published sanitized store data to Firestore.");
   } catch (err) {
-    console.error("❌ Error running Firestore database synchronization:", err);
+    console.error("Error publishing sanitized Firestore store data:", err);
   }
 };
 
-// Initial sync on startup
-if (firestoreDb) {
-  loadDbFromFirestore();
-  // Periodic background check every 30 seconds to fetch changes from other scaled containers
-  setInterval(loadDbFromFirestore, 30000);
-}
+const loadDbFromPrivateFirestore = async () => {
+  if (!firestoreDb) return;
+  try {
+    const snapshot = await firestoreDb.collection('privateStores').get();
+    if (snapshot.empty) {
+      await publishAllStoresToFirestore();
+      return;
+    }
 
-const saveDb = () => {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+    const cloudStores: Record<string, StoreRecord> = {};
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data() as StoreRecord;
+      if (data.id && data.username && data.passwordHash) {
+        cloudStores[docSnap.id] = {
+          id: data.id,
+          username: data.username,
+          passwordHash: data.passwordHash,
+          storeName: sanitizeText(data.storeName, 120) || 'Store',
+          storeLogo: validateStoreLogo(data.storeLogo) || '',
+          products: normalizeProducts(data.products || []) || [],
+          visits: Number.isFinite(Number(data.visits)) ? Number(data.visits) : 0,
+        };
+      }
+    });
+
+    if (Object.keys(cloudStores).length > 0) {
+      db.stores = cloudStores;
+      saveDb();
+      await publishAllStoresToFirestore();
+      console.log("Loaded private store data from Firestore.");
+    }
+  } catch (err) {
+    console.error("Error loading private Firestore store data:", err);
+  }
 };
 
+const firestoreReady = firestoreDb ? loadDbFromPrivateFirestore() : Promise.resolve();
+if (firestoreDb) {
+  setInterval(loadDbFromPrivateFirestore, 30000);
+}
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret';
+function saveDb() {
+  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+}
+
 
 // Middleware
 const authenticateToken = (req: any, res: any, next: any) => {
@@ -201,25 +423,47 @@ const authenticateToken = (req: any, res: any, next: any) => {
   });
 };
 
-// API: Register Store
-app.post('/api/admin/register', (req, res) => {
-  const { username, password, storeName } = req.body;
-  
-  if (!username || !password || !storeName) {
-    return res.status(400).json({ error: 'All fields are required' });
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+const loginRateLimit = (req: any, res: any, next: any) => {
+  const key = req.ip || req.socket?.remoteAddress || 'unknown';
+  const now = Date.now();
+  const current = loginAttempts.get(key);
+
+  if (!current || current.resetAt < now) {
+    loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
+    return next();
   }
 
-  const existingStore = Object.values(db.stores).find((s: any) => s.username === username);
+  if (current.count >= 20) {
+    return res.status(429).json({ error: 'Too many login attempts. Try again later.' });
+  }
+
+  current.count += 1;
+  return next();
+};
+
+// API: Register Store
+app.post('/api/admin/register', authenticateToken, requireCommander, (req, res) => {
+  const username = validateUsername(req.body.username);
+  const password = validatePasswordInput(req.body.password);
+  const storeName = sanitizeText(req.body.storeName, 120);
+  
+  if (!username || !password || !storeName) {
+    return res.status(400).json({ error: 'Valid username, password, and store name are required' });
+  }
+
+  const existingStore = Object.values(db.stores).find((s: StoreRecord) => s.username === username);
   if (existingStore) {
     return res.status(400).json({ error: 'Username already exists' });
   }
 
-  const storeId = Date.now().toString() + Math.random().toString(36).substring(7);
+  const storeId = crypto.randomUUID();
   
   db.stores[storeId] = {
     id: storeId,
     username,
-    password, // Store plaintext for this simple PoC, should be hashed!
+    passwordHash: hashPassword(password),
     storeName,
     storeLogo: "",
     products: []
@@ -227,50 +471,22 @@ app.post('/api/admin/register', (req, res) => {
   saveDb();
   saveStoreToFirestore(storeId);
 
-  const token = jwt.sign({ username, storeId }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, storeId });
+  res.status(201).json({ storeId });
 });
 
 // API: Login
-app.post('/api/admin/login', (req, res) => {
-  const { username, password } = req.body;
+app.post('/api/admin/login', loginRateLimit, (req, res) => {
+  const username = validateUsername(req.body.username);
+  const password = typeof req.body.password === 'string' ? req.body.password : '';
   
-  let store = Object.values(db.stores).find((s: any) => s.username === username && s.password === password) as any;
-
-  // Let's also check dynamic environment-configured ADMIN_USERNAME and ADMIN_PASSWORD
-  const envAdminUser = process.env.ADMIN_USERNAME || 'admin';
-  const envAdminPass = process.env.ADMIN_PASSWORD || 'password123';
-  
-  const expectedCommanderUser = 'commander';
-  const expectedCommanderPass = 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y';
-
-  if (!store) {
-    if ((username === envAdminUser && password === envAdminPass) || 
-        (username === expectedCommanderUser && password === expectedCommanderPass)) {
-      // Authenticate as the default (commander) store
-      if (!db.stores['default']) {
-        db.stores['default'] = {
-          id: 'default',
-          username: expectedCommanderUser,
-          password: expectedCommanderPass,
-          storeName: "غرفة القيادة والعمليات والمراقبة",
-          storeLogo: "",
-          products: [],
-          visits: 0
-        };
-        saveDb();
-        if (firestoreDb) {
-          setDoc(doc(firestoreDb, 'stores', 'default'), db.stores['default']).catch(err => {
-            console.error("Failed to seed default store in firebase:", err);
-          });
-        }
-      }
-      store = db.stores['default'];
-    }
+  if (!username || !password) {
+    return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  if (store) {
-    const token = jwt.sign({ username: store.username, storeId: store.id }, JWT_SECRET, { expiresIn: '7d' });
+  const store = Object.values(db.stores).find((s: StoreRecord) => s.username === username);
+  if (store?.passwordHash && verifyPassword(password, store.passwordHash)) {
+    const role = store.id === 'default' ? 'commander' : 'store_admin';
+    const token = jwt.sign({ username: store.username, storeId: store.id, role }, JWT_SECRET, { expiresIn: '12h' });
     res.json({ token, storeId: store.id });
   } else {
     res.status(401).json({ error: 'Invalid credentials' });
@@ -316,17 +532,10 @@ app.get('/api/admin/store', authenticateToken, (req, res) => {
 });
 
 // API: Get all stores (Super Admin only)
-app.get('/api/admin/all-stores', authenticateToken, (req, res) => {
-  const user = (req as any).user;
-  const adminUser = 'commander';
-  if (user.username !== adminUser && user.username !== 'admin' && user.username !== 'administrator') {
-    return res.status(403).json({ error: 'Not authorized' });
-  }
-
-  const storesList = Object.values(db.stores).map((s: any) => ({
+app.get('/api/admin/all-stores', authenticateToken, requireCommander, (req, res) => {
+  const storesList = Object.values(db.stores).map((s: StoreRecord) => ({
     id: s.id,
     username: s.username,
-    password: s.password, // Needed so admin can share credentials with customer
     storeName: s.storeName,
     productsCount: s.products?.length || 0,
     visits: s.visits || 0
@@ -336,13 +545,8 @@ app.get('/api/admin/all-stores', authenticateToken, (req, res) => {
 });
 
 // API: Delete a store (Super Admin only)
-app.delete('/api/admin/stores/:id', authenticateToken, (req, res) => {
+app.delete('/api/admin/stores/:id', authenticateToken, requireCommander, (req, res) => {
   const user = (req as any).user;
-  const adminUser = 'commander';
-  if (user.username !== adminUser && user.username !== 'admin' && user.username !== 'administrator') {
-    return res.status(403).json({ error: 'Not authorized' });
-  }
-  
   const idToRemove = req.params.id;
   // Prevent deleting oneself
   if (idToRemove === user.storeId) {
@@ -364,7 +568,16 @@ app.put('/api/admin/store', authenticateToken, (req, res) => {
   const storeId = (req as any).user.storeId;
   if (!db.stores[storeId]) return res.status(404).json({ error: 'Not found' });
 
-  const { storeName, storeLogo } = req.body;
+  const storeName = req.body.storeName === undefined ? undefined : sanitizeText(req.body.storeName, 120);
+  const storeLogo = req.body.storeLogo === undefined ? undefined : validateStoreLogo(req.body.storeLogo);
+
+  if (req.body.storeName !== undefined && !storeName) {
+    return res.status(400).json({ error: 'Invalid store name' });
+  }
+  if (req.body.storeLogo !== undefined && storeLogo === null) {
+    return res.status(400).json({ error: 'Invalid store logo' });
+  }
+
   if (storeName !== undefined) db.stores[storeId].storeName = storeName;
   if (storeLogo !== undefined) db.stores[storeId].storeLogo = storeLogo;
   saveDb();
@@ -377,8 +590,8 @@ app.post('/api/admin/products', authenticateToken, (req, res) => {
   const storeId = (req as any).user.storeId;
   if (!db.stores[storeId]) return res.status(404).json({ error: 'Not found' });
 
-  const { products } = req.body;
-  if (Array.isArray(products)) {
+  const products = normalizeProducts(req.body.products);
+  if (products) {
     db.stores[storeId].products = products;
     saveDb();
     saveStoreToFirestore(storeId);
@@ -390,6 +603,8 @@ app.post('/api/admin/products', authenticateToken, (req, res) => {
 
 
 async function startServer() {
+  await firestoreReady;
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

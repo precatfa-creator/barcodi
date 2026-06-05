@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "barcodi-a95a9"
+  },
+  "targets": {
+    "barcodi-a95a9": {
+      "hosting": {
+        "app": [
+          "barcodi-25a"
+        ]
+      }
+    }
+  }
+}

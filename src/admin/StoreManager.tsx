@@ -33,6 +33,11 @@ export default function StoreManager() {
        return;
      }
 
+     if (newStore.password.length < 8) {
+       setErrorMessage("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+       return;
+     }
+
      setIsSubmitting(true);
      setErrorMessage(null);
      setSuccessMessage(null);
@@ -43,7 +48,6 @@ export default function StoreManager() {
        id: tempId,
        storeName: newStore.storeName,
        username: newStore.username,
-       password: newStore.password,
        productsCount: 0,
        visits: 0,
        isOptimistic: true // Marker for local loading/indicator if needed
@@ -59,8 +63,15 @@ export default function StoreManager() {
      try {
        const res = await fetch('/api/admin/register', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(optimisticStore)
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          },
+          body: JSON.stringify({
+            username: newStore.username,
+            password: newStore.password,
+            storeName: newStore.storeName
+          })
        });
        
        if (res.ok) {
@@ -195,7 +206,7 @@ export default function StoreManager() {
            <thead className="text-xs text-gray-400 uppercase bg-gray-50 border-b border-gray-200">
              <tr>
                <th className="px-4 py-3 text-right">المتجر</th>
-               <th className="px-4 py-3 text-right">بيانات الدخول</th>
+               <th className="px-4 py-3 text-right">حساب الدخول</th>
                <th className="px-4 py-3 text-center">المنتجات</th>
                <th className="px-4 py-3 text-left">إجراء</th>
              </tr>
@@ -216,7 +227,7 @@ export default function StoreManager() {
                    </td>
                    <td className="px-4 py-4 font-mono text-xs">
                      <span className="bg-gray-100 px-2 py-1 rounded text-gray-600" dir="ltr">يوزر: {store.username}</span>
-                     <span className="bg-gray-100 px-2 py-1 rounded text-gray-600 mr-2" dir="ltr">باس: {store.password}</span>
+                     <span className="block mt-2 text-[11px] text-gray-400 font-sans">كلمة المرور لا تعرض بعد الإنشاء</span>
                    </td>
                    <td className="px-4 py-4 text-center font-bold">
                      <div className="bg-blue-50 text-blue-700 inline-block px-3 py-1 rounded-full text-xs">

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'scanner-store-v1';
+const CACHE_NAME = 'scanner-store-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   // Exclude development tool sockets / Vite client things
-  if (url.pathname.includes('/@vite/') || url.pathname.includes('/@fs/') || url.pathname.includes('socket')) {
+  if (url.pathname.startsWith('/api/') || url.pathname.includes('/@vite/') || url.pathname.includes('/@fs/') || url.pathname.includes('socket')) {
     return;
   }
 

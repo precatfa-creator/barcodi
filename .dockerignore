@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+dev-server.log
+npm-debug.log
+Dockerfile
+firebase-debug.log
+*.local

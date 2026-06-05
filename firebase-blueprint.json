@@ -2,17 +2,20 @@
   "entities": {
     "Store": {
       "title": "Store",
-      "description": "Store profile structure",
+      "description": "Public sanitized store profile structure",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "username": { "type": "string" },
-        "password": { "type": "string" },
         "storeName": { "type": "string" },
         "storeLogo": { "type": "string" },
-        "visits": { "type": "integer" }
+        "visits": { "type": "integer" },
+        "products": {
+          "type": "array",
+          "items": { "$ref": "#/entities/Product" }
+        },
+        "updatedAt": { "type": "string" }
       },
-      "required": ["id", "username", "password", "storeName"]
+      "required": ["id", "storeName"]
     },
     "Product": {
       "title": "Product",
@@ -24,16 +27,39 @@
         "price": { "type": "number" }
       },
       "required": ["barcode", "name", "price"]
+    },
+    "PrivateStore": {
+      "title": "PrivateStore",
+      "description": "Server-only private store record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "storeName": { "type": "string" },
+        "storeLogo": { "type": "string" },
+        "visits": { "type": "integer" },
+        "products": {
+          "type": "array",
+          "items": { "$ref": "#/entities/Product" }
+        },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "username", "passwordHash", "storeName"]
     }
   },
   "firestore": {
     "/stores/{storeId}": {
       "schema": "Store",
-      "description": "Registry of retail stores"
+      "description": "Public sanitized retail store data"
+    },
+    "/privateStores/{storeId}": {
+      "schema": "PrivateStore",
+      "description": "Server-only private store records with usernames and password hashes"
     },
     "/stores/{storeId}/products/{productId}": {
       "schema": "Product",
-      "description": "Stores subcollection of barcode catalog products"
+      "description": "Disabled; products are published inside sanitized store documents"
     }
   }
 }

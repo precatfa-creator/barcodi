@@ -1,8 +1,37 @@
 import { useState, useRef, ChangeEvent, useMemo, useEffect } from 'react';
 import { Upload, FileSpreadsheet, Package, CheckCircle2, AlertTriangle, Download, Plus, Trash2, Search, ChevronRight, ChevronLeft, Edit, X } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { readSheet } from 'read-excel-file/browser';
 import { useAppContext } from '../AppContext';
 import { Product } from '../types';
+
+type ProductImportRow = Record<string, string | number | undefined>;
+
+const cellToValue = (value: unknown): string | number | undefined => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'string' || typeof value === 'number') return value;
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+};
+
+const downloadCsv = (rows: ProductImportRow[], filename: string) => {
+  const headers = Object.keys(rows[0]);
+  const escapeCsv = (value: string | number | undefined) => {
+    const text = value === undefined ? '' : String(value);
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  const csv = [
+    headers.join(','),
+    ...rows.map((row) => headers.map((header) => escapeCsv(row[header])).join(',')),
+  ].join('\n');
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
 
 export default function ProductsUpload() {
   const { products, setProducts } = useAppContext();
@@ -135,10 +164,7 @@ export default function ProductsUpload() {
         weight: '50g'
       }
     ];
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'المنتجات');
-    XLSX.writeFile(workbook, 'قالب_المنتجات.xlsx');
+    downloadCsv(templateData, 'قالب_المنتجات.csv');
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -148,23 +174,43 @@ export default function ProductsUpload() {
     setFile(selected);
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const data = event.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const json = XLSX.utils.sheet_to_json<any>(worksheet);
+        if (!(data instanceof ArrayBuffer)) {
+          throw new Error('Invalid file data');
+        }
+
+        const rows = await readSheet(data);
+        if (rows.length < 2) {
+          throw new Error('Workbook has no product rows');
+        }
+        const headers: string[] = [];
+        rows[0].forEach((cell, index) => {
+          headers[index] = String(cellToValue(cell) || '').trim();
+        });
+
+        const json: ProductImportRow[] = [];
+        rows.slice(1).forEach((row) => {
+          const item: ProductImportRow = {};
+          headers.forEach((header, colNumber) => {
+            if (!header) return;
+            item[header] = cellToValue(row[colNumber]);
+          });
+          if (Object.values(item).some((value) => value !== undefined && value !== '')) {
+            json.push(item);
+          }
+        });
         
-        const parsedProducts: Product[] = json.map((row: any, index: number) => ({
+        const parsedProducts: Product[] = json.map((row, index) => ({
           id: row['id']?.toString() || `uploaded_${Date.now()}_${index}`,
-          name: row['name'] || 'منتج غير معروف',
+          name: row['name']?.toString() || 'منتج غير معروف',
           barcode: row['barcode']?.toString() || '',
           price: Number(row['price']) || 0,
-          category: row['category'] || 'general',
-          description: row['description'] || '',
-          imageEmoji: row['imageEmoji'] || '📦',
-          imageUrl: row['imageUrl'] || undefined,
+          category: row['category']?.toString() || 'general',
+          description: row['description']?.toString() || '',
+          imageEmoji: row['imageEmoji']?.toString() || '📦',
+          imageUrl: row['imageUrl']?.toString() || undefined,
           stock: row['stock'] ? Number(row['stock']) : undefined,
           calories: row['calories'] ? Number(row['calories']) : undefined,
           weight: row['weight']?.toString(),
@@ -176,7 +222,7 @@ export default function ProductsUpload() {
         setError('حدث خطأ أثناء قراءة الملف. تأكد من أن الملف هو ملف Excel صالح بصفحة واحدة وتنسيق صحيح للكتابة.');
       }
     };
-    reader.readAsBinaryString(selected);
+    reader.readAsArrayBuffer(selected);
   };
 
   const handleConfirmUpload = () => {

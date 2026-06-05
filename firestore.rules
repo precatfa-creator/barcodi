@@ -8,15 +8,15 @@ service cloud.firestore {
 
     // Stores collection rules
     match /stores/{storeId} {
-      // Server-side middleware proxies these requests securely, but allow direct lookup
+      // Public store pages can subscribe to a known sanitized store document.
+      // Writes are performed only by the server through Firebase Admin SDK.
       allow get: if true;
-      allow list: if true;
-      allow create, update, delete: if true;
+      allow list: if false;
+      allow create, update, delete: if false;
 
       // Products subcollection
       match /products/{productId} {
-        allow get, list: if true;
-        allow create, update, delete: if true;
+        allow get, list, create, update, delete: if false;
       }
     }
   }
