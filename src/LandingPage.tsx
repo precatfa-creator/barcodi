@@ -42,7 +42,7 @@ export default function LandingPage() {
       popular: false,
       color: "from-blue-400 to-indigo-500",
       buttonText: "ابدأ التجربة المجانية الآن",
-      whatsappMsg: "مرحباً، أرغب في تجربة الخطة المجانية لقارئ متجري"
+      whatsappMsg: "مرحباً، أرغب في تجربة الخطة المجانية لباركودي"
     },
     {
       name: "الخطة الاحترافية (النمو السريع)",
@@ -114,41 +114,40 @@ export default function LandingPage() {
       <div className="absolute bottom-[-10%] right-[10%] w-[550px] h-[550px] rounded-full bg-sky-100/50 blur-[140px] pointer-events-none -z-10" />
 
       {/* Header Sticky Container */}
-      <header className="sticky top-0 z-50 bg-white/40 backdrop-blur-md border-b border-white/60 px-6 py-4 flex items-center justify-between mx-auto max-w-7xl rounded-b-3xl shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-primary-dark to-primary-main flex items-center justify-center text-white shadow-md">
+      <header className="sticky top-0 z-50 bg-white/40 backdrop-blur-md border-b border-white/60 px-4 md:px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-0 mx-auto max-w-7xl rounded-b-3xl shadow-sm">
+        <div className="flex items-center justify-center md:justify-start gap-3 w-full md:w-auto">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-primary-dark to-primary-main flex items-center justify-center text-white shadow-md shrink-0">
             <Store className="w-5.5 h-5.5" />
           </div>
           <div>
-            <h1 className="text-lg font-black tracking-tight text-gray-900 leading-none">قارئ متجري</h1>
+            <h1 className="text-lg font-black tracking-tight text-gray-900 leading-none font-sans">باركودي</h1>
             <span className="text-[10px] text-primary-dark font-bold">بوابة تسوق ذكية متكاملة لخصائص الأسعار</span>
           </div>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-4 w-full md:w-auto">
           <Link 
             to="/admin" 
-            className="text-gray-700 font-black hover:text-primary-dark py-2 px-4 rounded-xl hover:bg-white/50 transition-all text-sm"
+            className="flex items-center justify-center w-full md:w-auto bg-white/60 md:bg-transparent border border-white md:border-transparent shadow-sm md:shadow-none text-gray-700 font-black hover:text-primary-dark py-2.5 px-1 sm:px-3 rounded-xl hover:bg-white/80 transition-all text-xs sm:text-sm"
           >
-            تسجيل الدخول للإدارة
+            <span className="whitespace-nowrap">تسجيل الدخول للإدارة</span>
           </Link>
           <a 
             href="https://wa.me/218945953967" 
             target="_blank" 
             rel="noopener noreferrer" 
-            className="bg-primary-dark hover:bg-primary-dark/90 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-md text-sm flex items-center gap-2"
+            className="flex items-center justify-center w-full md:w-auto bg-primary-dark hover:bg-primary-dark/90 text-white px-2 sm:px-5 py-2.5 rounded-xl font-bold transition-all shadow-md text-xs sm:text-sm gap-1.5"
           >
-            <MessageCircle className="w-4 h-4" />
-            <span>طلب حساب متجر</span>
+            <MessageCircle className="w-4 h-4 shrink-0" />
+            <span className="whitespace-nowrap">طلب حساب متجر</span>
           </a>
         </div>
       </header>
 
       {/* Hero Welcome Unit */}
       <section className="max-w-6xl mx-auto px-6 pt-16 pb-12 text-center relative z-10">
-        <div className="inline-flex items-center gap-2 bg-white/70 backdrop-blur-md border border-white px-4 py-2 rounded-full shadow-sm mb-6">
-          <Sparkles className="w-4 h-4 text-primary-dark animate-pulse" />
-          <span className="text-xs font-black text-primary-dark">الجيل الجديد من حلول البيع بالتجزئة والخدمة الذاتية</span>
+        <div className="inline-flex items-center gap-2 bg-gray-900 text-white border border-gray-800 px-4 py-2 rounded-xl shadow-xl shadow-gray-900/10 mb-6 group">
+          <span className="text-[11px] font-black tracking-widest uppercase">الجيل الجديد من حلول البيع بالتجزئة والخدمة الذاتية</span>
         </div>
 
         <h2 className="text-4xl md:text-6xl font-black text-gray-950 mb-6 leading-[1.2] max-w-4xl mx-auto">
@@ -185,16 +184,11 @@ export default function LandingPage() {
           
           <div className="bg-white/90 rounded-2xl shadow-inner border border-gray-100 overflow-hidden">
              {/* Virtual Dashboard Simulator Bar */}
-             <div className="bg-gray-50 border-b border-gray-100 px-4 py-3 flex items-center justify-between text-xs text-gray-400 font-bold">
+             <div className="bg-gray-50 border-b border-gray-100 px-4 py-3 flex items-center text-xs text-gray-400 font-bold">
                <div className="flex items-center gap-2">
                  <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
                  <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-               </div>
-               <span className="font-mono text-gray-500">https://yourstore.qreader/scan</span>
-               <div className="flex gap-1.5 items-center bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[10px]">
-                 <ShieldCheck className="w-3 h-3" />
-                 <span>نشط وآمن</span>
                </div>
              </div>
 
@@ -267,7 +261,7 @@ export default function LandingPage() {
       <section className="bg-white/40 backdrop-blur-xl border-y border-white/60 py-24 relative z-10">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="text-xs font-black text-primary-dark bg-primary-pale/60 px-3.5 py-1.5 rounded-full border border-primary-light/40 uppercase tracking-widest">مقارنة وحلول فريدة</span>
+            <span className="inline-flex items-center justify-center px-4 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black tracking-widest uppercase shadow-xl shadow-gray-900/10 border border-gray-800">مقارنة وحلول فريدة</span>
             <h3 className="text-3xl md:text-4xl font-black text-gray-950 mt-4 mb-6 leading-tight">
               لماذا يُعد قارئ متجري الخيار والأول والأكثر ذكاءً؟
             </h3>
@@ -327,9 +321,9 @@ export default function LandingPage() {
           {/* Interactive Feature: Shopping Cart Highlight */}
           <div className="mt-16 bg-gradient-to-tr from-primary-pale/40 to-white/70 backdrop-blur-md border border-white rounded-[2.5rem] p-8 md:p-12 shadow-sm flex flex-col lg:flex-row items-center justify-between gap-12">
              <div className="lg:w-1/2 space-y-6 text-right">
-               <div className="inline-flex items-center gap-2 bg-primary-pale text-primary-dark px-3 py-1 rounded-full text-xs font-black">
-                 <ShoppingCart className="w-4 h-4" />
-                 <span>ميزة سلة المحتويات المضمّنة</span>
+               <div className="inline-flex items-center gap-2 bg-gray-900 text-white border border-gray-800 px-4 py-2 rounded-xl shadow-xl shadow-gray-900/10">
+                 <ShoppingCart className="w-4 h-4 text-primary-main" />
+                 <span className="text-[11px] font-black tracking-widest uppercase">ميزة سلة المحتويات المضمّنة</span>
                </div>
                <h4 className="text-3xl font-black text-gray-950 leading-tight">
                   مراقبة وحساب المجموع مباشرة من يد العميل أثناء التجول!
@@ -408,7 +402,7 @@ export default function LandingPage() {
       <section id="pricing" className="py-24 relative z-10">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="text-xs font-black text-primary-dark bg-primary-pale/60 px-3.5 py-1.5 rounded-full border border-primary-light/40 uppercase tracking-widest">التأسيس وخطط الأسعار</span>
+            <span className="inline-flex items-center justify-center px-4 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black tracking-widest uppercase shadow-xl shadow-gray-900/10 border border-gray-800">التأسيس وخطط الأسعار</span>
             <h3 className="text-3xl md:text-4xl font-black text-gray-950 mt-4 mb-6 leading-tight">
                خطط اشتراك شفافة تلائم مختلف الأحجام
             </h3>
@@ -487,7 +481,7 @@ export default function LandingPage() {
       <section className="bg-white/40 backdrop-blur-xl border-t border-white/60 py-24 relative z-10">
         <div className="max-w-4xl mx-auto px-6">
           <div className="text-center mb-16">
-            <span className="text-xs font-black text-primary-dark bg-primary-pale/60 px-3.5 py-1.5 rounded-full border border-primary-light/40 uppercase tracking-widest">لديك استفسارات؟</span>
+            <span className="inline-flex items-center justify-center px-4 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black tracking-widest uppercase shadow-xl shadow-gray-900/10 border border-gray-800">لديك استفسارات؟</span>
             <h3 className="text-2xl md:text-3xl font-black text-gray-950 mt-4">
                الأسئلة الشائعة حول الخدمة
             </h3>
@@ -542,10 +536,10 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-gray-400 font-bold">
            <div className="flex items-center gap-2 text-primary-dark">
              <Store className="w-5 h-5" />
-             <span className="font-sans text-sm text-gray-800">قارئ متجري SaaS</span>
+             <span className="font-sans text-sm text-gray-800">Barcodi - باركودي</span>
            </div>
            <div>
-             <span>&copy; {new Date().getFullYear()} نظام النخبة لقارئ الباركود (SaaS). جميع الحقوق محفوظة.</span>
+             <span>&copy; {new Date().getFullYear()}باركودي. جميع الحقوق محفوظة.</span>
            </div>
            <div className="flex items-center gap-4 text-gray-500">
              <Link to="/admin" className="hover:text-primary-dark transition-colors">بوابة المشتركين والعملاء</Link>

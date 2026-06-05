@@ -6,7 +6,7 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { initializeFirestore, doc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 
 dotenv.config();
 
@@ -62,7 +62,7 @@ try {
       id: 'default',
       username: 'commander',
       password: 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y',
-      storeName: "سوبر ماركت السلام",
+      storeName: "باركودي - الإدارة العامة",
       storeLogo: "",
       products: [],
       visits: 0
@@ -74,6 +74,7 @@ try {
   if (db.stores['default']) {
     db.stores['default'].username = 'commander';
     db.stores['default'].password = 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y';
+    db.stores['default'].storeName = "باركودي - الإدارة العامة";
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
   }
 } catch (e) {
@@ -90,7 +91,12 @@ if (fs.existsSync(firebaseConfigPath)) {
   try {
     const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf-8'));
     const firebaseApp = initializeApp(firebaseConfig);
-    firestoreDb = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    const dbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId.trim() !== "" 
+      ? firebaseConfig.firestoreDatabaseId 
+      : undefined;
+    firestoreDb = dbId 
+      ? initializeFirestore(firebaseApp, { experimentalForceLongPolling: true }, dbId)
+      : initializeFirestore(firebaseApp, { experimentalForceLongPolling: true });
     console.log("🔥 Successfully connected to Firebase cloud!");
   } catch (err) {
     console.error("❌ Failed to initialize Firebase app:", err);
@@ -121,20 +127,41 @@ const loadDbFromFirestore = async () => {
       cloudStoresCount++;
     });
 
-    if (cloudStoresCount > 0) {
-      // Enforce the default admin credentials even if loaded from old firestore data
-      if (db.stores['default']) {
-        const expectedUser = 'commander';
-        const expectedPass = 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y';
-        if (db.stores['default'].username !== expectedUser || db.stores['default'].password !== expectedPass) {
-          db.stores['default'].username = expectedUser;
-          db.stores['default'].password = expectedPass;
-          // Sync it back to firestore
-          await setDoc(doc(firestoreDb, 'stores', 'default'), db.stores['default']);
-          console.log("☁️ Updated old default admin credentials in Firestore.");
-        }
+    // Enforce that 'default' (Commander) is ALWAYS safely initialized in db.stores 
+    if (!db.stores['default']) {
+      db.stores['default'] = {
+        id: 'default',
+        username: 'commander',
+        password: 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y',
+        storeName: "باركودي - الإدارة العامة",
+        storeLogo: "",
+        products: [],
+        visits: 0
+      };
+      if (firestoreDb) {
+        await setDoc(doc(firestoreDb, 'stores', 'default'), db.stores['default']);
       }
     } else {
+      // Enforce the default admin credentials and store name even if loaded from old firestore data
+      const expectedUser = 'commander';
+      const expectedPass = 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y';
+      const expectedName = "باركودي - الإدارة العامة";
+      if (
+        db.stores['default'].username !== expectedUser || 
+        db.stores['default'].password !== expectedPass || 
+        db.stores['default'].storeName !== expectedName
+      ) {
+        db.stores['default'].username = expectedUser;
+        db.stores['default'].password = expectedPass;
+        db.stores['default'].storeName = expectedName;
+        if (firestoreDb) {
+          await setDoc(doc(firestoreDb, 'stores', 'default'), db.stores['default']);
+        }
+        console.log("☁️ Updated old default admin credentials or store name in Firestore.");
+      }
+    }
+
+    if (cloudStoresCount === 0) {
       console.log("☁️ Cloud database is empty. Uploading current local seed data to Cloud Firestore...");
       // Seed Cloud Firestore with existing local database stores
       for (const [storeId, storeData] of Object.entries(db.stores)) {
@@ -208,7 +235,39 @@ app.post('/api/admin/register', (req, res) => {
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body;
   
-  const store = Object.values(db.stores).find((s: any) => s.username === username && s.password === password) as any;
+  let store = Object.values(db.stores).find((s: any) => s.username === username && s.password === password) as any;
+
+  // Let's also check dynamic environment-configured ADMIN_USERNAME and ADMIN_PASSWORD
+  const envAdminUser = process.env.ADMIN_USERNAME || 'admin';
+  const envAdminPass = process.env.ADMIN_PASSWORD || 'password123';
+  
+  const expectedCommanderUser = 'commander';
+  const expectedCommanderPass = 'J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y';
+
+  if (!store) {
+    if ((username === envAdminUser && password === envAdminPass) || 
+        (username === expectedCommanderUser && password === expectedCommanderPass)) {
+      // Authenticate as the default (commander) store
+      if (!db.stores['default']) {
+        db.stores['default'] = {
+          id: 'default',
+          username: expectedCommanderUser,
+          password: expectedCommanderPass,
+          storeName: "غرفة القيادة والعمليات والمراقبة",
+          storeLogo: "",
+          products: [],
+          visits: 0
+        };
+        saveDb();
+        if (firestoreDb) {
+          setDoc(doc(firestoreDb, 'stores', 'default'), db.stores['default']).catch(err => {
+            console.error("Failed to seed default store in firebase:", err);
+          });
+        }
+      }
+      store = db.stores['default'];
+    }
+  }
 
   if (store) {
     const token = jwt.sign({ username: store.username, storeId: store.id }, JWT_SECRET, { expiresIn: '7d' });

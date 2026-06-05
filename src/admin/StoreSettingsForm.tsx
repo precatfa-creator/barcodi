@@ -12,13 +12,16 @@ export default function StoreSettingsForm() {
   });
 
   const [savedMessage, setSavedMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setErrorMessage('');
+
     if (file.size > 500 * 1024) {
-       alert("حجم الصورة كبير جداً. الرجاء اختيار صورة بحجم أقل من 500 كيلوبايت لضمان سرعة التحميل.");
+       setErrorMessage("حجم الصورة كبير جداً. الرجاء اختيار صورة بحجم أقل من 500 كيلوبايت لضمان سرعة التحميل.");
        if (fileInputRef.current) fileInputRef.current.value = '';
        return;
     }
@@ -107,6 +110,9 @@ export default function StoreSettingsForm() {
                    </button>
                  </div>
                  <p className="text-xs text-gray-500 font-medium">الحد الأقصى لحجم الصورة: 500 كيلوبايت. يفضل استخدام شعار مربع.</p>
+                 {errorMessage && (
+                   <p className="text-xs text-rose-600 font-bold bg-rose-50 p-2.5 rounded-lg border border-rose-100 my-2">{errorMessage}</p>
+                 )}
              </div>
            </div>
         </div>

@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useRef, useEffect } from 'react';
 import { Product, StoreSettings } from './types';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
 interface AppContextProps {
   products: Product[];
@@ -22,10 +24,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [products, setProductsState] = useState<Product[]>([]);
   const [storeSettings, setStoreSettingsState] = useState<StoreSettings>(defaultStoreSettings);
   const [loading, setLoading] = useState(false);
+  
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  // Clean up listener on unmount
+  useEffect(() => {
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
+  }, []);
 
   const loadStoreData = async (storeId: string) => {
     setLoading(true);
+    
+    // Unsubscribe from any previous store updates
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
+    }
+
     try {
+      // 1. Rapid API Initial load
       const [storeRes, productsRes] = await Promise.all([
         fetch(`/api/public/store/${storeId}`),
         fetch(`/api/public/products/${storeId}`)
@@ -57,6 +78,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       setProductsState([]);
     } finally {
       setLoading(false);
+    }
+
+    // 2. Real-time Firebase Firestore Sync for direct web clients
+    try {
+      const storeDocRef = doc(db, 'stores', storeId);
+      unsubscribeRef.current = onSnapshot(storeDocRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          
+          if (data.storeName !== undefined) {
+            setStoreSettingsState(prev => ({
+              ...prev,
+              name: data.storeName,
+              logoUrl: data.storeLogo || null,
+              visits: data.visits || prev.visits
+            }));
+          }
+          
+          if (Array.isArray(data.products)) {
+            setProductsState(data.products);
+          }
+        }
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, `stores/${storeId}`);
+      });
+    } catch (err) {
+      console.warn("Client Firestore live sync unconfigured or denied:", err);
     }
   };
 

@@ -27,11 +27,11 @@
     }
   },
   "firestore": {
-    "stores/{storeId}": {
+    "/stores/{storeId}": {
       "schema": "Store",
       "description": "Registry of retail stores"
     },
-    "stores/{storeId}/products/{productId}": {
+    "/stores/{storeId}/products/{productId}": {
       "schema": "Product",
       "description": "Stores subcollection of barcode catalog products"
     }

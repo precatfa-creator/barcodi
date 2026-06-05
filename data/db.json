@@ -1,0 +1,75 @@
+{
+  "stores": {
+    "default": {
+      "password": "J9@x#2$vK!8z&P*qLwR%Tb_Nd5m7Xs9Y",
+      "visits": 25294,
+      "id": "default",
+      "storeName": "باركودي - الإدارة العامة",
+      "storeLogo": "",
+      "username": "commander",
+      "products": []
+    },
+    "1780527377828lkaj4d": {
+      "password": "pass123",
+      "visits": 3997,
+      "id": "1780527377828lkaj4d",
+      "storeName": "متاجر",
+      "storeLogo": "",
+      "username": "matajer",
+      "products": [
+        {
+          "description": "",
+          "category": "general",
+          "price": 20,
+          "name": "بطاطا",
+          "imageEmoji": "📦",
+          "barcode": "1",
+          "id": "1780527837375"
+        }
+      ]
+    },
+    "1780527677832x4h3pa": {
+      "products": [
+        {
+          "name": "نوتيلا",
+          "imageEmoji": "📦",
+          "id": "1780527928731",
+          "barcode": "1",
+          "price": 230,
+          "description": "",
+          "category": "general"
+        }
+      ],
+      "username": "tajmole",
+      "storeLogo": "",
+      "storeName": "تاج مول",
+      "password": "pass123",
+      "visits": 5590,
+      "id": "1780527677832x4h3pa"
+    },
+    "1780666579879t0iqph": {
+      "products": [],
+      "storeLogo": "",
+      "username": "sultan",
+      "storeName": "سلطان ماركت",
+      "password": "pass123",
+      "id": "1780666579879t0iqph"
+    },
+    "1780666609057ayxyb9": {
+      "products": [],
+      "username": "Dddd",
+      "storeLogo": "",
+      "storeName": "Xxxd",
+      "id": "1780666609057ayxyb9",
+      "password": "Ccddc"
+    },
+    "1780666629464xxtvzc": {
+      "products": [],
+      "username": "Rtt",
+      "storeLogo": "",
+      "storeName": "Tttt",
+      "id": "1780666629464xxtvzc",
+      "password": "Ffgt"
+    }
+  }
+}

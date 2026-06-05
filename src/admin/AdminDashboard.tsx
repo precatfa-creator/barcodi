@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Store, UploadCloud, LogOut, QrCode, Users } from 'lucide-react';
+import { LayoutDashboard, Store, UploadCloud, LogOut, QrCode, Users, Search, Activity } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import StoreSettingsForm from './StoreSettingsForm';
 import ProductsUpload from './ProductsUpload';
 import StoreManager from './StoreManager';
+import CommanderOverview from './CommanderOverview';
+import CommanderProductAudit from './CommanderProductAudit';
+import CommanderLiveFeed from './CommanderLiveFeed';
 import { useAppContext } from '../AppContext';
 
 interface Props {
@@ -38,13 +41,22 @@ export default function AdminDashboard({ onLogout }: Props) {
     fetchStore();
   }, [loadStoreData]);
 
-  const navItems = [
-    { path: '/admin/dashboard', icon: LayoutDashboard, label: 'لوحة القيادة' },
-    { path: '/admin/dashboard/settings', icon: Store, label: 'إعدادات المتجر' },
-    { path: '/admin/dashboard/products', icon: UploadCloud, label: 'إدارة المنتجات' },
-  ];
+  const isCommander = storeId === 'default';
 
-  if (isAdmin) {
+  const navItems = isCommander
+    ? [
+        { path: '/admin/dashboard', icon: LayoutDashboard, label: 'غرفة القيادة والعمليات' },
+        { path: '/admin/dashboard/subscribers', icon: Users, label: 'إدارة المشتركين والمتاجر' },
+        { path: '/admin/dashboard/audit', icon: Search, label: 'مراقبة السلع والمنتجات' },
+        { path: '/admin/dashboard/livefeed', icon: Activity, label: 'التدفق والمراقبة المباشرة' }
+      ]
+    : [
+        { path: '/admin/dashboard', icon: LayoutDashboard, label: 'لوحة القيادة' },
+        { path: '/admin/dashboard/settings', icon: Store, label: 'إعدادات المتجر' },
+        { path: '/admin/dashboard/products', icon: UploadCloud, label: 'إدارة المنتجات' },
+      ];
+
+  if (isAdmin && !isCommander) {
     navItems.push({ path: '/admin/dashboard/customers', icon: Users, label: 'إدارة المشتركين' });
   }
 
@@ -53,7 +65,9 @@ export default function AdminDashboard({ onLogout }: Props) {
       {/* Sidebar sidebar */}
       <aside className="w-64 bg-white border-l border-gray-200 hidden md:flex flex-col">
         <div className="p-6">
-          <h2 className="text-xl font-black text-primary-dark">الإدارة</h2>
+          <h2 className="text-xl font-black text-primary-dark">
+            {isCommander ? 'لوحة التحكم' : 'إدارة متجرك'}
+          </h2>
         </div>
         <nav className="flex-1 px-4 space-y-2">
           {navItems.map((item) => (
@@ -82,30 +96,31 @@ export default function AdminDashboard({ onLogout }: Props) {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-y-auto w-full max-w-full">
+        <main className="flex-1 flex flex-col h-screen overflow-y-auto w-full max-w-full pb-20 md:pb-0">
         {/* Mobile Header */}
         <header className="md:hidden bg-white px-4 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 z-10">
-          <h2 className="font-black text-primary-dark">الإدارة</h2>
+          <h2 className="font-black text-primary-dark">
+            {isCommander ? 'لوحة التحكم' : 'إدارة متجرك'}
+          </h2>
           <button onClick={onLogout} className="p-2 text-rose-500">
             <LogOut className="w-5 h-5" />
           </button>
         </header>
 
         {/* Mobile Nav */}
-        <div className="md:hidden bg-white border-b border-gray-200 flex overflow-x-auto">
+        <div className="md:hidden fixed bottom-4 left-4 right-4 z-50 bg-white/90 backdrop-blur-md border border-gray-200 shadow-xl rounded-2xl flex justify-around p-2 gap-1">
           {navItems.map((item) => (
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className={`flex-1 flex items-center justify-center gap-2 py-4 px-2 font-bold text-sm whitespace-nowrap border-b-2 transition-all ${
+              className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-xl transition-all ${
                 location.pathname === item.path
-                  ? 'border-primary-dark text-primary-dark'
-                  : 'border-transparent text-gray-500'
+                  ? 'bg-primary-light/20 text-primary-dark'
+                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
               }`}
             >
-              <item.icon className="w-4 h-4" />
-              <span>{item.label}</span>
+              <item.icon className={`w-5 h-5 ${location.pathname === item.path ? 'text-primary-dark' : 'text-gray-400'}`} />
+              <span className="text-[10px] font-bold md:text-sm text-center leading-tight whitespace-normal">{item.label}</span>
             </button>
           ))}
         </div>
@@ -113,10 +128,21 @@ export default function AdminDashboard({ onLogout }: Props) {
         <div className="p-4 md:p-8">
           <div className="max-w-4xl mx-auto w-full">
             <Routes>
-              <Route path="/" element={<Overview storeId={storeId} />} />
-              <Route path="/settings" element={<StoreSettingsForm />} />
-              <Route path="/products" element={<ProductsUpload />} />
-              {isAdmin && <Route path="/customers" element={<StoreManager />} />}
+              {isCommander ? (
+                <>
+                  <Route path="/" element={<CommanderOverview />} />
+                  <Route path="/subscribers" element={<StoreManager />} />
+                  <Route path="/audit" element={<CommanderProductAudit />} />
+                  <Route path="/livefeed" element={<CommanderLiveFeed />} />
+                </>
+              ) : (
+                <>
+                  <Route path="/" element={<Overview storeId={storeId} />} />
+                  <Route path="/settings" element={<StoreSettingsForm />} />
+                  <Route path="/products" element={<ProductsUpload />} />
+                  {isAdmin && <Route path="/customers" element={<StoreManager />} />}
+                </>
+              )}
             </Routes>
           </div>
         </div>

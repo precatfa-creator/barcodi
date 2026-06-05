@@ -1,5 +1,5 @@
 import { useState, useRef, ChangeEvent, useMemo, useEffect } from 'react';
-import { Upload, FileSpreadsheet, Package, CheckCircle2, AlertTriangle, Download, Plus, Trash2, Search, ChevronRight, ChevronLeft, Edit } from 'lucide-react';
+import { Upload, FileSpreadsheet, Package, CheckCircle2, AlertTriangle, Download, Plus, Trash2, Search, ChevronRight, ChevronLeft, Edit, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAppContext } from '../AppContext';
 import { Product } from '../types';
@@ -18,6 +18,12 @@ export default function ProductsUpload() {
   const [newProduct, setNewProduct] = useState<Partial<Product>>({ name: '', barcode: '', price: 0 });
   const ITEMS_PER_PAGE = 50;
 
+  // Non-blocking UI alert and confirm states
+  const [successInfo, setSuccessInfo] = useState<string | null>(null);
+  const [errorInfo, setErrorInfo] = useState<string | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [showConfirmDeleteAll, setShowConfirmDeleteAll] = useState(false);
+
   const filteredProducts = useMemo(() => {
     return products.filter(p => 
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -34,7 +40,7 @@ export default function ProductsUpload() {
 
   const handleSaveProduct = () => {
     if (!newProduct.name || !newProduct.barcode || newProduct.price === undefined) {
-       alert("الرجاء تعبئة الاسم والباركود والسعر");
+       setErrorInfo("الرجاء تعبئة الاسم والباركود والسعر");
        return;
     }
     
@@ -51,6 +57,8 @@ export default function ProductsUpload() {
           return p;
        });
        setProducts(updatedProducts);
+       setSuccessInfo("تم تعديل المنتج بنجاح!");
+       setTimeout(() => setSuccessInfo(null), 3000);
     } else {
        const p: Product = {
            id: Date.now().toString(),
@@ -63,6 +71,8 @@ export default function ProductsUpload() {
            stock: newProduct.stock,
        };
        setProducts([...products, p]);
+       setSuccessInfo("تم إضافة المنتج بنجاح!");
+       setTimeout(() => setSuccessInfo(null), 3000);
     }
     
     setIsAddingMode(false);
@@ -85,15 +95,30 @@ export default function ProductsUpload() {
   };
 
   const handleDeleteProduct = (id: string) => {
-    if(confirm('هل أنت متأكد من حذف هذا المنتج؟')) {
-        setProducts(products.filter(p => p.id !== id));
+    const p = products.find(prod => prod.id === id);
+    if (p) {
+      setProductToDelete(p);
+    }
+  };
+
+  const confirmDeleteProduct = () => {
+    if (productToDelete) {
+      setProducts(products.filter(p => p.id !== productToDelete.id));
+      setSuccessInfo(`تم حذف المنتج "${productToDelete.name}" بنجاح`);
+      setTimeout(() => setSuccessInfo(null), 3000);
+      setProductToDelete(null);
     }
   };
 
   const handleDeleteAll = () => {
-    if(confirm('هل أنت متأكد من حذف جميع المنتجات؟ هذا الإجراء لا يمكن التراجع عنه.')) {
-        setProducts([]);
-    }
+    setShowConfirmDeleteAll(true);
+  };
+
+  const confirmDeleteAll = () => {
+    setProducts([]);
+    setSuccessInfo("تم إفراغ جميع المنتجات بنجاح");
+    setTimeout(() => setSuccessInfo(null), 3000);
+    setShowConfirmDeleteAll(false);
   };
 
   const handleDownloadTemplate = () => {
@@ -177,13 +202,91 @@ export default function ProductsUpload() {
       setProducts(existingProducts);
       setFile(null);
       setPreview([]);
-      alert(`تم بنجاح. منتجات جديدة: ${newCount}، منتجات محدثة: ${updatedCount}.`);
+      setSuccessInfo(`تم الاستيراد بنجاح! منتجات جديدة: ${newCount}، منتجات محدثة: ${updatedCount}.`);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   return (
-    <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+    <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100 relative">
+      
+      {/* Non-blocking feedback messages */}
+      {successInfo && (
+        <div className="mb-4 p-4 bg-green-50 text-green-800 rounded-2xl border border-green-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-green-600" />
+            <span className="font-bold text-sm">{successInfo}</span>
+          </div>
+          <button onClick={() => setSuccessInfo(null)} className="text-green-600 hover:text-green-800 p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {errorInfo && (
+        <div className="mb-4 p-4 bg-red-50 text-red-800 rounded-2xl border border-red-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+            <span className="font-bold text-sm">{errorInfo}</span>
+          </div>
+          <button onClick={() => setErrorInfo(null)} className="text-red-600 hover:text-red-800 p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Elegant Custom Confirmation Modal for a single product */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100">
+            <h3 className="text-lg font-black text-gray-900 mb-2">تأكيد حذف المنتج</h3>
+            <p className="text-gray-500 text-sm mb-6">
+              هل أنت متأكد من رغبتك في حذف المنتج <span className="font-extrabold text-gray-900">"{productToDelete.name}"</span>؟ سيتم حذفه من قاعدة البيانات فوراً.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setProductToDelete(null)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl transition-colors text-sm"
+              >
+                تراجع وإلغاء
+              </button>
+              <button 
+                onClick={confirmDeleteProduct}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl transition-colors text-sm"
+              >
+                نعم، احذف المنتج
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Elegant Custom Confirmation Modal for ALL products */}
+      {showConfirmDeleteAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100">
+            <h3 className="text-lg font-black text-rose-700 mb-2">تنبيه: حذف جميع المنتجات!</h3>
+            <p className="text-gray-500 text-sm mb-6">
+              هل أنت متأكد تماماً من رغبتك في حذف <span className="font-extrabold text-rose-700">جميع المنتجات دفعة واحدة</span>؟ هذا الإجراء سوف يفرغ كامل الكتالوج ولا يمكن استرجاع المنتجات المحذوفة لاحقاً.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setShowConfirmDeleteAll(false)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl transition-colors text-sm"
+              >
+                تراجع وإلغاء
+              </button>
+              <button 
+                onClick={confirmDeleteAll}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-xl transition-colors text-sm"
+              >
+                نعم، امسح كل شيء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
