@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Store, UploadCloud, LogOut, QrCode, Users, Search, Activity } from 'lucide-react';
+import { LayoutDashboard, Store, UploadCloud, LogOut, QrCode, Users, Search } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import StoreSettingsForm from './StoreSettingsForm';
 import ProductsUpload from './ProductsUpload';
 import StoreManager from './StoreManager';
 import CommanderOverview from './CommanderOverview';
 import CommanderProductAudit from './CommanderProductAudit';
-import CommanderLiveFeed from './CommanderLiveFeed';
 import { useAppContext } from '../AppContext';
 
 interface Props {
@@ -47,8 +46,7 @@ export default function AdminDashboard({ onLogout }: Props) {
     ? [
         { path: '/admin/dashboard', icon: LayoutDashboard, label: 'غرفة القيادة والعمليات' },
         { path: '/admin/dashboard/subscribers', icon: Users, label: 'إدارة المشتركين والمتاجر' },
-        { path: '/admin/dashboard/audit', icon: Search, label: 'مراقبة السلع والمنتجات' },
-        { path: '/admin/dashboard/livefeed', icon: Activity, label: 'التدفق والمراقبة المباشرة' }
+        { path: '/admin/dashboard/audit', icon: Search, label: 'مراقبة السلع والمنتجات' }
       ]
     : [
         { path: '/admin/dashboard', icon: LayoutDashboard, label: 'لوحة القيادة' },
@@ -133,7 +131,6 @@ export default function AdminDashboard({ onLogout }: Props) {
                   <Route path="/" element={<CommanderOverview />} />
                   <Route path="/subscribers" element={<StoreManager />} />
                   <Route path="/audit" element={<CommanderProductAudit />} />
-                  <Route path="/livefeed" element={<CommanderLiveFeed />} />
                 </>
               ) : (
                 <>
@@ -162,7 +159,7 @@ function Overview({ storeId }: { storeId: string | null }) {
           <Store className="w-16 h-16 text-gray-300 mx-auto md:mx-0 mb-4" />
           <h2 className="text-2xl font-black text-gray-900 mb-2">مرحباً بك في لوحة تحكم المتجر</h2>
           <p className="text-gray-500 max-w-lg mx-auto md:mx-0">
-            يمكنك من هنا تغيير إسم المتجر والشعار والعملة، بالإضافة إلى رفع ملفات إكسل لإضافة وتحديث المنتجات بسرعة.
+            يمكنك من هنا تغيير إسم المتجر والشعار، بالإضافة إلى رفع ملفات إكسل لإضافة وتحديث المنتجات بسرعة.
           </p>
         </div>
         

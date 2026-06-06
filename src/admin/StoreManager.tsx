@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Plus, Store, Link as LinkIcon, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { Users, Trash2, Plus, Store, Link as LinkIcon, AlertCircle, CheckCircle, X, KeyRound, Copy } from 'lucide-react';
 
 export default function StoreManager() {
   const [stores, setStores] = useState<any[]>([]);
@@ -9,6 +9,8 @@ export default function StoreManager() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [storeToDelete, setStoreToDelete] = useState<any | null>(null);
+  const [resettingStoreId, setResettingStoreId] = useState<string | null>(null);
+  const [resetPasswordResult, setResetPasswordResult] = useState<{ username: string; password: string } | null>(null);
 
   const fetchStores = async () => {
     try {
@@ -104,6 +106,45 @@ export default function StoreManager() {
     setStoreToDelete(store);
   };
 
+  const handleResetPassword = async (store: any) => {
+    if (store.id === 'default' || store.isOptimistic) return;
+
+    setResettingStoreId(store.id);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setResetPasswordResult(null);
+
+    try {
+      const res = await fetch(`/api/admin/stores/${store.id}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+        },
+        body: JSON.stringify({})
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'تعذر إعادة تعيين كلمة المرور');
+      }
+
+      setResetPasswordResult({ username: data.username, password: data.newPassword });
+      setSuccessMessage('تم إعادة تعيين كلمة المرور بنجاح');
+    } catch (error: any) {
+      setErrorMessage(error.message || 'خطأ في الاتصال أثناء إعادة تعيين كلمة المرور');
+    } finally {
+      setResettingStoreId(null);
+    }
+  };
+
+  const handleCopyResetPassword = async () => {
+    if (!resetPasswordResult) return;
+    const text = `username: ${resetPasswordResult.username}\npassword: ${resetPasswordResult.password}`;
+    await navigator.clipboard.writeText(text);
+    setSuccessMessage('تم نسخ بيانات الدخول الجديدة');
+  };
+
   const handleConfirmDelete = async () => {
     if (!storeToDelete) return;
 
@@ -158,6 +199,25 @@ export default function StoreManager() {
           </div>
           <button onClick={() => setErrorMessage(null)} className="text-red-600 hover:text-red-800 p-1">
             <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {resetPasswordResult && (
+        <div className="mb-4 p-4 bg-blue-50 text-blue-900 rounded-2xl border border-blue-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="text-sm font-bold">
+            <div className="mb-1">بيانات الدخول الجديدة</div>
+            <div className="font-mono text-xs bg-white/70 border border-blue-100 rounded-xl px-3 py-2" dir="ltr">
+              username: {resetPasswordResult.username}<br />
+              password: {resetPasswordResult.password}
+            </div>
+          </div>
+          <button
+            onClick={handleCopyResetPassword}
+            className="self-start md:self-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-colors"
+          >
+            <Copy className="w-4 h-4" />
+            نسخ
           </button>
         </div>
       )}
@@ -226,7 +286,7 @@ export default function StoreManager() {
                      </div>
                    </td>
                    <td className="px-4 py-4 font-mono text-xs">
-                     <span className="bg-gray-100 px-2 py-1 rounded text-gray-600" dir="ltr">يوزر: {store.username}</span>
+                     <span className="bg-gray-100 px-2 py-1 rounded text-gray-600" dir="ltr">username: {store.username}</span>
                      <span className="block mt-2 text-[11px] text-gray-400 font-sans">كلمة المرور لا تعرض بعد الإنشاء</span>
                    </td>
                    <td className="px-4 py-4 text-center font-bold">
@@ -239,6 +299,14 @@ export default function StoreManager() {
                        <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-primary-main bg-gray-50 hover:bg-primary-50 p-2 rounded-lg transition-colors" title="رابط المتجر">
                          <LinkIcon className="w-4 h-4" />
                        </a>
+                       <button
+                         onClick={() => handleResetPassword(store)}
+                         disabled={store.id === 'default' || store.isOptimistic || resettingStoreId === store.id}
+                         className="text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed p-2 rounded-lg transition-colors"
+                         title={store.id === 'default' ? 'لا يمكن إعادة ضبط حساب القائد من هنا' : 'إعادة تعيين كلمة المرور'}
+                       >
+                         <KeyRound className={`w-4 h-4 ${resettingStoreId === store.id ? 'animate-pulse' : ''}`} />
+                       </button>
                        <button onClick={() => handleDeleteClick(store)} className="text-rose-500 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 p-2 rounded-lg transition-colors">
                          <Trash2 className="w-4 h-4" />
                        </button>

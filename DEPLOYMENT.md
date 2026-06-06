@@ -4,47 +4,59 @@ This project deploys as:
 
 - Netlify for the React/Vite frontend
 - Google Cloud Run service `barcodi-api` for `/api/**`
-- Firebase Firestore for the database and security rules
+- Supabase Postgres for store/admin/product data
 
 The frontend calls `/api/...` normally. Netlify proxies those paths to Cloud Run using `dist/_redirects`, generated from the `BACKEND_URL` environment variable during the Netlify build.
 
-## 1. Deploy the Backend to Cloud Run
+## 1. Supabase
 
-Enable Google Cloud CLI access for project `barcodi-a95a9`, then create production secrets:
+Create this table in Supabase, or run the migration already applied in this workspace:
 
-```bash
-gcloud secrets create JWT_SECRET --project barcodi-a95a9
-gcloud secrets versions add JWT_SECRET --project barcodi-a95a9 --data-file=-
+```sql
+create table if not exists public.stores (
+  id text primary key,
+  username text not null unique,
+  password_hash text not null,
+  store_name text not null,
+  store_logo text not null default '',
+  products jsonb not null default '[]'::jsonb,
+  visits integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
-gcloud secrets create ADMIN_PASSWORD --project barcodi-a95a9
-gcloud secrets versions add ADMIN_PASSWORD --project barcodi-a95a9 --data-file=-
+alter table public.stores enable row level security;
 ```
 
-Generate a strong JWT secret with:
+No browser policies are required because the app writes through the server with the service role key.
 
-```bash
-node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-```
+## 2. Deploy the Backend to Cloud Run
 
-Deploy the API:
+Set Cloud Run env vars/secrets:
+
+- `NODE_ENV=production`
+- `ADMIN_USERNAME=commander`
+- `ADMIN_PASSWORD`
+- `JWT_SECRET`
+- `APP_URL=https://YOUR_NETLIFY_SITE.netlify.app`
+- `CORS_ORIGIN=https://YOUR_NETLIFY_SITE.netlify.app`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Deploy:
 
 ```bash
 gcloud run deploy barcodi-api \
   --source . \
   --region us-central1 \
-  --project barcodi-a95a9 \
   --allow-unauthenticated \
-  --set-env-vars NODE_ENV=production,ADMIN_USERNAME=commander,APP_URL=https://YOUR_NETLIFY_SITE.netlify.app,CORS_ORIGIN=https://YOUR_NETLIFY_SITE.netlify.app \
-  --set-secrets JWT_SECRET=JWT_SECRET:latest,ADMIN_PASSWORD=ADMIN_PASSWORD:latest
+  --set-env-vars NODE_ENV=production,ADMIN_USERNAME=commander,APP_URL=https://YOUR_NETLIFY_SITE.netlify.app,CORS_ORIGIN=https://YOUR_NETLIFY_SITE.netlify.app,SUPABASE_URL=https://YOUR_SUPABASE_PROJECT.supabase.co \
+  --set-secrets JWT_SECRET=JWT_SECRET:latest,ADMIN_PASSWORD=ADMIN_PASSWORD:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest
 ```
 
-Copy the Cloud Run service URL from the deploy output. It will look like:
+Copy the Cloud Run service URL from the deploy output.
 
-```text
-https://barcodi-api-xxxxx-uc.a.run.app
-```
-
-## 2. Deploy the Frontend to Netlify
+## 3. Deploy the Frontend to Netlify
 
 In Netlify:
 
@@ -60,14 +72,6 @@ netlify login
 netlify init
 netlify deploy --build
 netlify deploy --build --prod
-```
-
-## 3. Deploy Firestore Rules
-
-```bash
-firebase login
-firebase use barcodi-a95a9
-firebase deploy --only firestore:rules,firestore:indexes
 ```
 
 ## 4. First Login
@@ -88,6 +92,5 @@ password: the ADMIN_PASSWORD secret
 ## Notes
 
 - Do not commit `.env.local` or production secrets.
-- Firestore public collection `stores` is sanitized for clients.
-- Firestore private collection `privateStores` stores server-only records and is inaccessible from browser rules.
+- The Supabase service role key must stay server-side only.
 - If your Netlify URL changes, update Cloud Run `APP_URL` and `CORS_ORIGIN`.

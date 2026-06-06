@@ -1,7 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode, useRef, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Product, StoreSettings } from './types';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
 interface AppContextProps {
   products: Product[];
@@ -9,13 +7,13 @@ interface AppContextProps {
   storeSettings: StoreSettings;
   setStoreSettings: (settings: StoreSettings) => void;
   loadStoreData: (storeId: string) => Promise<void>;
+  subscribeToStoreData: (storeId: string) => () => void;
   loading: boolean;
 }
 
 const defaultStoreSettings: StoreSettings = {
   name: 'جاري التحميل...',
   logoUrl: null,
-  currency: 'ر.س',
 };
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
@@ -25,25 +23,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [storeSettings, setStoreSettingsState] = useState<StoreSettings>(defaultStoreSettings);
   const [loading, setLoading] = useState(false);
   
-  const unsubscribeRef = useRef<(() => void) | null>(null);
-
-  // Clean up listener on unmount
-  useEffect(() => {
-    return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-      }
-    };
-  }, []);
-
   const loadStoreData = async (storeId: string) => {
     setLoading(true);
-    
-    // Unsubscribe from any previous store updates
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current();
-      unsubscribeRef.current = null;
-    }
 
     try {
       // 1. Rapid API Initial load
@@ -79,33 +60,51 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
+  };
 
-    // 2. Real-time Firebase Firestore Sync for direct web clients
-    try {
-      const storeDocRef = doc(db, 'stores', storeId);
-      unsubscribeRef.current = onSnapshot(storeDocRef, (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          
-          if (data.storeName !== undefined) {
-            setStoreSettingsState(prev => ({
-              ...prev,
-              name: data.storeName,
-              logoUrl: data.storeLogo || null,
-              visits: data.visits || prev.visits
-            }));
-          }
-          
-          if (Array.isArray(data.products)) {
-            setProductsState(data.products);
-          }
-        }
-      }, (error) => {
-        handleFirestoreError(error, OperationType.GET, `stores/${storeId}`);
-      });
-    } catch (err) {
-      console.warn("Client Firestore live sync unconfigured or denied:", err);
+  const applyStorePayload = (storeData: any) => {
+    if (storeData.storeName) {
+      setStoreSettingsState(prev => ({
+        ...prev,
+        name: storeData.storeName,
+        logoUrl: storeData.storeLogo || null,
+        visits: storeData.visits ?? prev.visits
+      }));
     }
+
+    if (Array.isArray(storeData.products)) {
+      setProductsState(storeData.products);
+    }
+  };
+
+  const subscribeToStoreData = (storeId: string) => {
+    if (typeof window === 'undefined' || !('EventSource' in window)) {
+      return () => {};
+    }
+
+    const events = new EventSource(`/api/public/store/${storeId}/events`);
+
+    events.addEventListener('store:update', (event) => {
+      try {
+        applyStorePayload(JSON.parse(event.data));
+      } catch (error) {
+        console.warn('Failed to parse realtime store update', error);
+      }
+    });
+
+    events.addEventListener('store:deleted', () => {
+      setProductsState([]);
+      setStoreSettingsState({
+        ...defaultStoreSettings,
+        name: 'المتجر غير متاح',
+      });
+    });
+
+    events.onerror = () => {
+      // Browser EventSource reconnects automatically. The server also sends heartbeats.
+    };
+
+    return () => events.close();
   };
 
   const setProducts = async (newProducts: Product[]) => {
@@ -133,7 +132,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, loading }}>
+    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, subscribeToStoreData, loading }}>
       {children}
     </AppContext.Provider>
   );

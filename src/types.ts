@@ -30,14 +30,6 @@ export interface AppSettings {
 export interface StoreSettings {
   name: string;
   logoUrl: string | null;
-  currency: string;
   visits?: number;
 }
 
-export interface StoreConfig {
-  name: string;
-  wifiName: string;
-  currency: string;
-  budgetLimit: number;
-  isCustomWifiConnected: boolean; // Simulator flag
-}

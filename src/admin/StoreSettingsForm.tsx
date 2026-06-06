@@ -7,7 +7,6 @@ export default function StoreSettingsForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     name: storeSettings.name,
-    currency: storeSettings.currency,
     logoUrl: storeSettings.logoUrl || '',
   });
 
@@ -39,7 +38,6 @@ export default function StoreSettingsForm() {
     e.preventDefault();
     setStoreSettings({
       name: formData.name,
-      currency: formData.currency,
       logoUrl: formData.logoUrl || null,
       visits: storeSettings.visits
     });
@@ -116,19 +114,6 @@ export default function StoreSettingsForm() {
              </div>
            </div>
         </div>
-
-        <div>
-          <label className="block text-sm font-bold text-gray-700 mb-2">العملة</label>
-          <input
-            type="text"
-            required
-            value={formData.currency}
-            onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-            className="w-full bg-gray-50 border border-gray-200 text-gray-900 px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary-main focus:border-transparent outline-none transition-all"
-            placeholder="مثال: ر.س"
-          />
-        </div>
-
         <div className="pt-4 flex items-center justify-between">
           <button
             type="submit"

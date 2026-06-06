@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Wifi, ShoppingBag, Barcode, HelpCircle, Sparkles, MapPin, Store, RefreshCw, Signal, Settings, Loader2 } from 'lucide-react';
-import { Product, CartItem, StoreConfig, AppSettings } from './types';
+import { Product, CartItem, AppSettings } from './types';
 import { NetworkGuard } from './components/NetworkGuard';
 import { ScannerTab, playBeepSound } from './components/ScannerTab';
 import { ProductCard } from './components/ProductCard';
@@ -17,11 +17,12 @@ import { useAppContext } from './AppContext';
 
 export default function App() {
   const { storeId } = useParams<{ storeId: string }>();
-  const { storeSettings, products, loadStoreData, loading } = useAppContext();
+  const { storeSettings, products, loadStoreData, subscribeToStoreData, loading } = useAppContext();
   
   useEffect(() => {
     if (storeId) {
       loadStoreData(storeId);
+      return subscribeToStoreData(storeId);
     }
   }, [storeId]);
   

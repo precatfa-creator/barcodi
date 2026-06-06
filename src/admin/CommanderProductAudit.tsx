@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { Search, Layers, Box, Tag, DollarSign, BarChart2 } from 'lucide-react';
 
 interface ProductWithStore {
@@ -24,36 +22,38 @@ export default function CommanderProductAudit() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'stores'), (snapshot) => {
-      const storesList: any[] = [];
-      const joinedProducts: ProductWithStore[] = [];
+    const loadStores = async () => {
+      try {
+        const token = localStorage.getItem('adminToken');
+        const res = await fetch('/api/admin/all-stores', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error('Failed to load stores');
 
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (docSnap.id !== 'default') {
-          storesList.push({ id: docSnap.id, ...data });
-          
-          if (Array.isArray(data.products)) {
-            data.products.forEach((prod: any) => {
+        const storesList = (await res.json()).filter((store: any) => store.id !== 'default');
+        const joinedProducts: ProductWithStore[] = [];
+        storesList.forEach((store: any) => {
+          if (Array.isArray(store.products)) {
+            store.products.forEach((prod: any) => {
               joinedProducts.push({
                 ...prod,
-                storeId: docSnap.id,
-                storeName: data.storeName || 'متجر غير مسمى',
+                storeId: store.id,
+                storeName: store.storeName || 'متجر غير مسمى',
               });
             });
           }
-        }
-      });
+        });
 
-      setStores(storesList);
-      setAllItems(joinedProducts);
-      setLoading(false);
-    }, (error) => {
-      console.warn("ProductAudit onSnapshot offline or unreachable:", error);
-      setLoading(false);
-    });
+        setStores(storesList);
+        setAllItems(joinedProducts);
+      } catch (error) {
+        console.warn("ProductAudit load failed:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => unsub();
+    loadStores();
   }, []);
 
   // Filter products

@@ -6,8 +6,7 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import { initializeApp as initializeAdminApp, cert, applicationDefault } from 'firebase-admin/app';
-import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -86,6 +85,8 @@ const validatePasswordInput = (password: unknown) => {
   return password.length >= 8 && password.length <= 128 ? password : null;
 };
 
+const generateTemporaryPassword = () => `Barcodi-${crypto.randomBytes(6).toString('base64url')}`;
+
 const validateStoreLogo = (logo: unknown) => {
   if (logo === undefined || logo === null || logo === '') return '';
   if (typeof logo !== 'string') return null;
@@ -141,26 +142,6 @@ const normalizeProducts = (products: unknown) => {
   return normalized as ProductRecord[];
 };
 
-const publicStoreDocument = (store: StoreRecord) => ({
-  id: store.id,
-  storeName: store.storeName,
-  storeLogo: store.storeLogo || '',
-  products: store.products || [],
-  visits: store.visits || 0,
-  updatedAt: new Date().toISOString(),
-});
-
-const privateStoreDocument = (store: StoreRecord) => ({
-  id: store.id,
-  username: store.username,
-  passwordHash: store.passwordHash,
-  storeName: store.storeName,
-  storeLogo: store.storeLogo || '',
-  products: store.products || [],
-  visits: store.visits || 0,
-  updatedAt: new Date().toISOString(),
-});
-
 const migrateStoreCredentials = (store: StoreRecord) => {
   if (!store.passwordHash && store.password) {
     store.passwordHash = hashPassword(store.password);
@@ -204,6 +185,11 @@ type ProductRecord = {
   stock?: number;
   calories?: number;
   weight?: string;
+};
+
+type StoreEventClient = {
+  id: string;
+  res: express.Response;
 };
 
 let db: {
@@ -299,114 +285,261 @@ try {
 }
 
 // ----------------------------------------------------
-// FIREBASE FIRESTORE SYNC & MIGRATION ENGINE
+// SUPABASE DATABASE SYNC
 // ----------------------------------------------------
-let firestoreDb: Firestore | null = null;
-const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
-const hasFirebaseAdminCredentials = Boolean(
-  process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
-  process.env.GOOGLE_APPLICATION_CREDENTIALS ||
-  isProduction
-);
+let supabase: SupabaseClient | null = null;
+let supabaseFailureCount = 0;
+let supabaseUnavailableUntil = 0;
+let supabaseFlushInFlight = false;
+let supabaseLoadInFlight = false;
+let supabaseFlushTimer: ReturnType<typeof setTimeout> | null = null;
+const pendingSupabaseStoreIds = new Set<string>();
 
-if (fs.existsSync(firebaseConfigPath) && hasFirebaseAdminCredentials) {
-  try {
-    const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf-8'));
-    const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
-      ? cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY))
-      : applicationDefault();
-
-    initializeAdminApp({
-      credential: serviceAccount,
-      projectId: firebaseConfig.projectId,
-    });
-
-    const dbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId.trim() !== ""
-      ? firebaseConfig.firestoreDatabaseId
-      : undefined;
-    firestoreDb = dbId ? getFirestore(dbId) : getFirestore();
-    console.log("Successfully connected to Firebase Admin Firestore.");
-  } catch (err) {
-    console.warn("Firebase Admin Firestore is not configured; running with local file storage only.", err);
-  }
-} else if (fs.existsSync(firebaseConfigPath)) {
-  console.log("Firebase Admin credentials not configured; running with local file storage only.");
+if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+  console.log("Supabase database configured.");
+} else {
+  console.log("Supabase credentials not configured; running with local file storage only.");
 }
 
-const saveStoreToFirestore = async (storeId: string) => {
-  if (!firestoreDb) return;
-  try {
-    const storeData = db.stores[storeId];
-    if (storeData) {
-      await firestoreDb.collection('privateStores').doc(storeId).set(privateStoreDocument(storeData));
-      await firestoreDb.collection('stores').doc(storeId).set(publicStoreDocument(storeData));
-    } else {
-      await firestoreDb.collection('privateStores').doc(storeId).delete();
-      await firestoreDb.collection('stores').doc(storeId).delete();
-    }
-  } catch (err) {
-    console.error(`Failed to sync store ${storeId} to Firestore:`, err);
+const getSupabaseBackoffMs = () => Math.min(5 * 60 * 1000, 10_000 * (2 ** Math.min(supabaseFailureCount, 5)));
+
+const isSupabasePaused = () => Date.now() < supabaseUnavailableUntil;
+
+const getErrorMessage = (err: unknown) => {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object' && 'message' in err) return String((err as { message?: unknown }).message);
+  return String(err);
+};
+
+const markSupabaseFailure = (context: string, err: unknown) => {
+  supabaseFailureCount += 1;
+  const backoffMs = getSupabaseBackoffMs();
+  supabaseUnavailableUntil = Date.now() + backoffMs;
+  console.warn(`${context}. Supabase sync paused for ${Math.round(backoffMs / 1000)}s: ${getErrorMessage(err)}`);
+};
+
+const markSupabaseSuccess = () => {
+  supabaseFailureCount = 0;
+  supabaseUnavailableUntil = 0;
+};
+
+const storesFingerprint = (stores: Record<string, StoreRecord>) => JSON.stringify(
+  Object.keys(stores)
+    .sort()
+    .map((id) => ({
+      id,
+      username: stores[id].username,
+      passwordHash: stores[id].passwordHash,
+      storeName: stores[id].storeName,
+      storeLogo: stores[id].storeLogo || '',
+      products: stores[id].products || [],
+      visits: stores[id].visits || 0,
+    }))
+);
+
+const storeToSupabaseRow = (store: StoreRecord) => ({
+  id: store.id,
+  username: store.username,
+  password_hash: store.passwordHash,
+  store_name: store.storeName,
+  store_logo: store.storeLogo || '',
+  products: store.products || [],
+  visits: store.visits || 0,
+});
+
+const supabaseRowToStore = (row: any): StoreRecord | null => {
+  if (!row?.id || !row?.username || !row?.password_hash) return null;
+  return {
+    id: row.id,
+    username: row.username,
+    passwordHash: row.password_hash,
+    storeName: sanitizeText(row.store_name, 120) || 'Store',
+    storeLogo: validateStoreLogo(row.store_logo) || '',
+    products: normalizeProducts(row.products || []) || [],
+    visits: Number.isFinite(Number(row.visits)) ? Number(row.visits) : 0,
+  };
+};
+
+const storeEventClients = new Map<string, Set<StoreEventClient>>();
+
+const getPublicStorePayload = (store: StoreRecord) => ({
+  storeName: store.storeName,
+  storeLogo: store.storeLogo,
+  products: store.products || [],
+  visits: store.visits || 0,
+});
+
+const writeStoreEvent = (client: StoreEventClient, event: string, data: unknown) => {
+  client.res.write(`event: ${event}\n`);
+  client.res.write(`data: ${JSON.stringify(data)}\n\n`);
+};
+
+const broadcastStoreUpdate = (storeId: string) => {
+  const clients = storeEventClients.get(storeId);
+  const store = db.stores[storeId];
+  if (!clients || clients.size === 0 || !store) return;
+
+  for (const client of clients) {
+    writeStoreEvent(client, 'store:update', getPublicStorePayload(store));
   }
 };
 
-const publishAllStoresToFirestore = async () => {
-  if (!firestoreDb) return;
-  try {
-    const batch = firestoreDb.batch();
-    for (const [storeId, storeData] of Object.entries(db.stores)) {
-      batch.set(firestoreDb.collection('privateStores').doc(storeId), privateStoreDocument(storeData));
-      batch.set(firestoreDb.collection('stores').doc(storeId), publicStoreDocument(storeData));
-    }
-    await batch.commit();
-    console.log("Published sanitized store data to Firestore.");
-  } catch (err) {
-    console.error("Error publishing sanitized Firestore store data:", err);
+const broadcastStoreDeleted = (storeId: string) => {
+  const clients = storeEventClients.get(storeId);
+  if (!clients || clients.size === 0) return;
+
+  for (const client of clients) {
+    writeStoreEvent(client, 'store:deleted', { storeId });
   }
 };
 
-const loadDbFromPrivateFirestore = async () => {
-  if (!firestoreDb) return;
+const flushPendingStoreSyncs = async () => {
+  if (!supabase || supabaseFlushInFlight || pendingSupabaseStoreIds.size === 0) return;
+  if (isSupabasePaused()) {
+    scheduleSupabaseFlush();
+    return;
+  }
+
+  supabaseFlushInFlight = true;
+  const storeIds = [...pendingSupabaseStoreIds];
+  pendingSupabaseStoreIds.clear();
+
   try {
-    const snapshot = await firestoreDb.collection('privateStores').get();
-    if (snapshot.empty) {
-      await publishAllStoresToFirestore();
+    const rows = storeIds
+      .map((storeId) => db.stores[storeId])
+      .filter(Boolean)
+      .map(storeToSupabaseRow);
+    const deletedIds = storeIds.filter((storeId) => !db.stores[storeId]);
+
+    if (rows.length > 0) {
+      const { error } = await supabase.from('stores').upsert(rows, { onConflict: 'id' });
+      if (error) throw error;
+    }
+
+    if (deletedIds.length > 0) {
+      const { error } = await supabase.from('stores').delete().in('id', deletedIds);
+      if (error) throw error;
+    }
+
+    markSupabaseSuccess();
+  } catch (err) {
+    storeIds.forEach((storeId) => pendingSupabaseStoreIds.add(storeId));
+    markSupabaseFailure(`Failed to sync ${storeIds.length} store change(s) to Supabase`, err);
+  } finally {
+    supabaseFlushInFlight = false;
+    if (pendingSupabaseStoreIds.size > 0) scheduleSupabaseFlush();
+  }
+};
+
+function scheduleSupabaseFlush() {
+  if (!supabase || supabaseFlushTimer) return;
+  const delay = isSupabasePaused()
+    ? Math.max(1000, supabaseUnavailableUntil - Date.now())
+    : 1000;
+
+  supabaseFlushTimer = setTimeout(() => {
+    supabaseFlushTimer = null;
+    void flushPendingStoreSyncs();
+  }, delay);
+}
+
+const saveStoreToDatabase = async (storeId: string) => {
+  if (!supabase) return;
+  pendingSupabaseStoreIds.add(storeId);
+  scheduleSupabaseFlush();
+};
+
+const publishAllStoresToDatabase = async () => {
+  if (!supabase) return;
+  if (isSupabasePaused()) return;
+  try {
+    const rows = Object.values(db.stores).map(storeToSupabaseRow);
+    if (rows.length === 0) return;
+    const { error } = await supabase.from('stores').upsert(rows, { onConflict: 'id' });
+    if (error) throw error;
+    markSupabaseSuccess();
+    console.log("Published store data to Supabase.");
+  } catch (err) {
+    markSupabaseFailure("Error publishing Supabase store data", err);
+  }
+};
+
+const loadDbFromSupabase = async () => {
+  if (!supabase) return;
+  if (supabaseLoadInFlight || isSupabasePaused()) return;
+  supabaseLoadInFlight = true;
+  try {
+    const { data, error } = await supabase.from('stores').select('*').order('id');
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      await publishAllStoresToDatabase();
       return;
     }
 
     const cloudStores: Record<string, StoreRecord> = {};
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data() as StoreRecord;
-      if (data.id && data.username && data.passwordHash) {
-        cloudStores[docSnap.id] = {
-          id: data.id,
-          username: data.username,
-          passwordHash: data.passwordHash,
-          storeName: sanitizeText(data.storeName, 120) || 'Store',
-          storeLogo: validateStoreLogo(data.storeLogo) || '',
-          products: normalizeProducts(data.products || []) || [],
-          visits: Number.isFinite(Number(data.visits)) ? Number(data.visits) : 0,
-        };
-      }
-    });
+    for (const row of data) {
+      const store = supabaseRowToStore(row);
+      if (store) cloudStores[store.id] = store;
+    }
 
     if (Object.keys(cloudStores).length > 0) {
+      const previousStores = db.stores;
+      const hasChanged = storesFingerprint(previousStores) !== storesFingerprint(cloudStores);
       db.stores = cloudStores;
-      saveDb();
-      await publishAllStoresToFirestore();
-      console.log("Loaded private store data from Firestore.");
+      if (hasChanged) {
+        console.log("Loaded updated store data from Supabase.");
+        const touchedStoreIds = new Set([
+          ...Object.keys(previousStores),
+          ...Object.keys(cloudStores),
+        ]);
+        for (const storeId of touchedStoreIds) {
+          if (!cloudStores[storeId]) {
+            broadcastStoreDeleted(storeId);
+          } else if (
+            storesFingerprint({ [storeId]: previousStores[storeId] }) !==
+            storesFingerprint({ [storeId]: cloudStores[storeId] })
+          ) {
+            broadcastStoreUpdate(storeId);
+          }
+        }
+      }
     }
+    markSupabaseSuccess();
   } catch (err) {
-    console.error("Error loading private Firestore store data:", err);
+    markSupabaseFailure("Error loading Supabase store data", err);
+  } finally {
+    supabaseLoadInFlight = false;
   }
 };
 
-const firestoreReady = firestoreDb ? loadDbFromPrivateFirestore() : Promise.resolve();
-if (firestoreDb) {
-  setInterval(loadDbFromPrivateFirestore, 30000);
+const databaseReady = Promise.resolve();
+if (supabase) {
+  void loadDbFromSupabase();
+  setInterval(loadDbFromSupabase, 30000);
 }
 
 function saveDb() {
+  if (supabase) return;
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+}
+
+function saveDbIfChanged() {
+  if (supabase) return;
+  const next = JSON.stringify(db, null, 2);
+  try {
+    if (fs.existsSync(DB_PATH) && fs.readFileSync(DB_PATH, 'utf-8') === next) {
+      return;
+    }
+  } catch {
+    // Fall through and rewrite if the cache cannot be read.
+  }
+  fs.writeFileSync(DB_PATH, next);
 }
 
 
@@ -468,8 +601,8 @@ app.post('/api/admin/register', authenticateToken, requireCommander, (req, res) 
     storeLogo: "",
     products: []
   };
-  saveDb();
-  saveStoreToFirestore(storeId);
+  saveDbIfChanged();
+  saveStoreToDatabase(storeId);
 
   res.status(201).json({ storeId });
 });
@@ -499,8 +632,9 @@ app.get('/api/public/store/:storeId', (req, res) => {
   const store = db.stores[storeId];
   if (store) {
     store.visits = (store.visits || 0) + 1;
-    saveDb();
-    saveStoreToFirestore(storeId);
+    saveDbIfChanged();
+    saveStoreToDatabase(storeId);
+    broadcastStoreUpdate(storeId);
     res.json({
       storeName: store.storeName,
       storeLogo: store.storeLogo
@@ -508,6 +642,45 @@ app.get('/api/public/store/:storeId', (req, res) => {
   } else {
     res.status(404).json({ error: 'Store not found' });
   }
+});
+
+// API: Realtime public store updates
+app.get('/api/public/store/:storeId/events', (req, res) => {
+  const storeId = req.params.storeId;
+  const store = db.stores[storeId];
+  if (!store) {
+    return res.status(404).json({ error: 'Store not found' });
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write('\n');
+
+  const client: StoreEventClient = {
+    id: crypto.randomUUID(),
+    res,
+  };
+  const clients = storeEventClients.get(storeId) || new Set<StoreEventClient>();
+  clients.add(client);
+  storeEventClients.set(storeId, clients);
+
+  writeStoreEvent(client, 'store:update', getPublicStorePayload(store));
+
+  const heartbeat = setInterval(() => {
+    writeStoreEvent(client, 'heartbeat', { now: Date.now() });
+  }, 25_000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    clients.delete(client);
+    if (clients.size === 0) {
+      storeEventClients.delete(storeId);
+    }
+  });
 });
 
 // API: Get Products (Public)
@@ -537,6 +710,8 @@ app.get('/api/admin/all-stores', authenticateToken, requireCommander, (req, res)
     id: s.id,
     username: s.username,
     storeName: s.storeName,
+    storeLogo: s.storeLogo,
+    products: s.products || [],
     productsCount: s.products?.length || 0,
     visits: s.visits || 0
   }));
@@ -555,12 +730,40 @@ app.delete('/api/admin/stores/:id', authenticateToken, requireCommander, (req, r
 
   if (db.stores[idToRemove]) {
     delete db.stores[idToRemove];
-    saveDb();
-    saveStoreToFirestore(idToRemove);
+    saveDbIfChanged();
+    saveStoreToDatabase(idToRemove);
+    broadcastStoreDeleted(idToRemove);
     res.json({ success: true });
   } else {
     res.status(404).json({ error: 'Not found' });
   }
+});
+
+// API: Reset a store password (Super Admin only)
+app.post('/api/admin/stores/:id/reset-password', authenticateToken, requireCommander, async (req, res) => {
+  const user = (req as any).user;
+  const storeId = req.params.id;
+
+  if (storeId === user.storeId) {
+    return res.status(400).json({ error: 'Cannot reset own account password from this screen' });
+  }
+
+  const store = db.stores[storeId];
+  if (!store) {
+    return res.status(404).json({ error: 'Store not found' });
+  }
+
+  const newPassword = validatePasswordInput(req.body?.password) || generateTemporaryPassword();
+  store.passwordHash = hashPassword(newPassword);
+  saveDbIfChanged();
+  await saveStoreToDatabase(storeId);
+
+  res.json({
+    success: true,
+    storeId,
+    username: store.username,
+    newPassword,
+  });
 });
 
 // API: Update Store Info (Admin)
@@ -580,8 +783,9 @@ app.put('/api/admin/store', authenticateToken, (req, res) => {
 
   if (storeName !== undefined) db.stores[storeId].storeName = storeName;
   if (storeLogo !== undefined) db.stores[storeId].storeLogo = storeLogo;
-  saveDb();
-  saveStoreToFirestore(storeId);
+  saveDbIfChanged();
+  saveStoreToDatabase(storeId);
+  broadcastStoreUpdate(storeId);
   res.json({ success: true, storeName: db.stores[storeId].storeName, storeLogo: db.stores[storeId].storeLogo });
 });
 
@@ -593,8 +797,9 @@ app.post('/api/admin/products', authenticateToken, (req, res) => {
   const products = normalizeProducts(req.body.products);
   if (products) {
     db.stores[storeId].products = products;
-    saveDb();
-    saveStoreToFirestore(storeId);
+    saveDbIfChanged();
+    saveStoreToDatabase(storeId);
+    broadcastStoreUpdate(storeId);
     res.json({ success: true, count: products.length });
   } else {
     res.status(400).json({ error: 'Invalid products format' });
@@ -603,7 +808,7 @@ app.post('/api/admin/products', authenticateToken, (req, res) => {
 
 
 async function startServer() {
-  await firestoreReady;
+  await databaseReady;
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

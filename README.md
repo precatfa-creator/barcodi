@@ -16,6 +16,8 @@ Barcodi is a Vite/React PWA for store barcode scanning. Customers open a store U
    - `ADMIN_USERNAME`
    - `ADMIN_PASSWORD`
    - `APP_URL` or `CORS_ORIGIN`
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
 
 3. Start the app:
 
@@ -28,11 +30,9 @@ Barcodi is a Vite/React PWA for store barcode scanning. Customers open a store U
 - `JWT_SECRET`, `ADMIN_USERNAME`, and `ADMIN_PASSWORD` are required when `NODE_ENV=production`.
 - Store passwords are hashed with PBKDF2 before storage.
 - `/api/admin/register`, `/api/admin/all-stores`, and store deletion require the commander token.
-- Firestore browser rules allow public reads of known sanitized store documents only. Public listing and all browser writes are denied.
-- Firestore server sync uses Firebase Admin credentials through Application Default Credentials or `FIREBASE_SERVICE_ACCOUNT_KEY`.
-- Full server records are stored in the server-only `privateStores` collection. Public clients only read sanitized `stores/{storeId}` documents.
-- Do not deploy old Firestore documents that contain `username`, `password`, or `passwordHash`; start the server once with Admin credentials so it republishes sanitized store documents.
-- See `DEPLOYMENT.md` for Netlify frontend, Cloud Run API, and Firestore deployment steps.
+- Supabase Postgres stores server-side records in the `stores` table.
+- The Supabase service role key is used only by the backend and must never be exposed to browser code.
+- See `DEPLOYMENT.md` for Netlify frontend, Cloud Run API, and Supabase deployment steps.
 
 ## Checks
 
