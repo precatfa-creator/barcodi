@@ -191,13 +191,6 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
 
         await stopCameraScanner();
 
-        const html5QrCode = new Html5Qrcode(scannerId, {
-          formatsToSupport: barcodeFormats,
-          useBarCodeDetectorIfSupported: false,
-          verbose: false,
-        });
-        scannerInstanceRef.current = html5QrCode;
-
         // CRITICAL: Do NOT call getCameras() before start(). Enumerating devices
         // opens its own camera stream to read labels; starting a second stream
         // right after causes NotReadableError ("could not start video source")
@@ -225,52 +218,67 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         };
 
         isStartingRef.current = true;
-        // Try multiple camera-acquisition strategies in order. Different phones
-        // fail differently: some reject a strict 'environment' constraint with
-        // OverconstrainedError, some need an explicit deviceId, some only work
-        // with no constraint at all. We try each until one starts.
-        const startStrategies: Array<() => Promise<void>> = [
+        // Try multiple camera-acquisition strategies. IMPORTANT: html5-qrcode's
+        // internal state machine can get stuck ("already under transition") if
+        // start() fails and we try start() again on the same instance. So we
+        // create a FRESH instance for each strategy attempt and clear the DOM.
+        const startStrategies: Array<(scanner: Html5Qrcode) => Promise<void>> = [
           // 1. Rear camera by facingMode (preferred on phones)
-          () => html5QrCode.start({ facingMode: { ideal: "environment" } }, scanConfig, handleBarcodeScanned, onScanError),
+          (s) => s.start({ facingMode: { ideal: "environment" } }, scanConfig, handleBarcodeScanned, onScanError),
           // 2. Rear camera by explicit deviceId (permission is now granted, so labels are readable)
-          async () => {
+          async (s) => {
             const devices = await Html5Qrcode.getCameras().catch(() => []);
             if (devices.length > 0) {
               setCameras(devices);
               const rear = [...devices].sort((a, b) => cameraLabelScore(b.label || '') - cameraLabelScore(a.label || ''))[0];
               if (rear?.id) {
-                return html5QrCode.start(rear.id, scanConfig, handleBarcodeScanned, onScanError);
+                return s.start(rear.id, scanConfig, handleBarcodeScanned, onScanError);
               }
             }
             throw new Error('No camera device id available');
           },
-          // 3. No constraint at all — let the browser pick whatever camera works
-          () => html5QrCode.start({ facingMode: "user" }, scanConfig, handleBarcodeScanned, onScanError),
+          // 3. Any available camera — let the browser pick
+          (s) => s.start({ facingMode: "user" }, scanConfig, handleBarcodeScanned, onScanError),
         ];
 
-        let started = false;
+        let startedScanner: Html5Qrcode | null = null;
         let lastError: any = null;
         try {
-          for (const strategy of startStrategies) {
+          for (let i = 0; i < startStrategies.length; i++) {
             if (!isMountedRef.current) break;
+
+            // Create a FRESH instance for each attempt (prevents state machine corruption)
+            const html5QrCode = new Html5Qrcode(scannerId, {
+              formatsToSupport: barcodeFormats,
+              useBarCodeDetectorIfSupported: false,
+              verbose: false,
+            });
+            scannerInstanceRef.current = html5QrCode;
+
             try {
-              await strategy();
-              started = true;
+              await startStrategies[i](html5QrCode);
+              startedScanner = html5QrCode;
               break;
             } catch (stratErr) {
               lastError = stratErr;
-              console.warn('Camera start strategy failed, trying next:', stratErr?.name || stratErr, stratErr?.message || '');
-              // Ensure the failed instance is fully stopped before retrying
-              try { if (html5QrCode.isScanning) await html5QrCode.stop(); } catch {}
+              console.warn(`Camera start strategy ${i + 1} failed, trying next:`, stratErr?.name || stratErr, stratErr?.message || '');
+              // Fully cleanup the failed instance before creating a new one
+              try { await html5QrCode.stop(); } catch {}
+              try { html5QrCode.clear(); } catch {}
+              // Clear the container DOM so the next instance starts with an empty element
+              const container = document.getElementById(scannerId);
+              if (container) container.innerHTML = '';
+              scannerInstanceRef.current = null;
             }
           }
         } finally {
           isStartingRef.current = false;
         }
 
-        if (!started) {
+        if (!startedScanner) {
           throw lastError || new Error('All camera start strategies failed');
         }
+        scannerInstanceRef.current = startedScanner;
 
         if (!isMountedRef.current) {
           // If the component unmounted while the start promise was resolving, stop immediately
@@ -284,7 +292,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
 
         // Detect if flashlight (torch) option is supported dynamically
         try {
-          const track = (html5QrCode as any).getRunningTrack();
+          const track = (startedScanner as any).getRunningTrack();
           if (track) {
             const capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {};
             const supportsFlash = !!(capabilities as any).torch || 'torch' in capabilities;
