@@ -30,6 +30,12 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '5mb' }));
 
+// Allow camera and media features for barcode scanning on all pages
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=()');
+  next();
+});
+
 // Setup our simple in-memory DB or fallback to file
 const DB_PATH = path.join(process.cwd(), 'data', 'db.json');
 const shouldUseSeedDb = !isProduction || process.env.USE_SEED_DB === 'true';

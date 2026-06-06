@@ -193,7 +193,8 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
 
         const html5QrCode = new Html5Qrcode(scannerId, {
           formatsToSupport: barcodeFormats,
-          useBarCodeDetectorIfSupported: true,
+          useBarCodeDetectorIfSupported: false,
+          verbose: false,
         });
         scannerInstanceRef.current = html5QrCode;
 
@@ -210,13 +211,24 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
           await html5QrCode.start(
             preferredCamera?.id || { facingMode: "environment" },
             {
-              fps: 12,
-              qrbox: { width: 280, height: 180 },
+              fps: 15,
+              qrbox: (viewWidth: number, viewHeight: number) => {
+                // Use 90% of the smaller dimension for a generous scan area
+                const minDim = Math.min(viewWidth, viewHeight);
+                const size = Math.floor(minDim * 0.9);
+                return { width: size, height: Math.floor(size * 0.55) };
+              },
               aspectRatio: 1.333,
               disableFlip: false,
             },
             handleBarcodeScanned,
-            () => {} // silence errors
+            (errorMessage: string) => {
+              // This fires when no barcode is found in a frame — normal, ignore.
+              // Only log unexpected errors for debugging.
+              if (errorMessage && !errorMessage.includes('NotFoundException')) {
+                console.debug('Scan frame error:', errorMessage);
+              }
+            }
           );
         } catch (startErr) {
           console.warn("Preferred camera failed, trying generic camera constraints:", startErr);
@@ -224,8 +236,12 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
             await html5QrCode.start(
               { facingMode: { ideal: "environment" } },
               {
-                fps: 10,
-                qrbox: { width: 260, height: 180 },
+                fps: 12,
+                qrbox: (viewWidth: number, viewHeight: number) => {
+                  const minDim = Math.min(viewWidth, viewHeight);
+                  const size = Math.floor(minDim * 0.9);
+                  return { width: size, height: Math.floor(size * 0.55) };
+                },
                 disableFlip: false
               },
               handleBarcodeScanned,

@@ -1,21 +1,11 @@
 {
   "stores": {
-    "default": {
-      "passwordHash": "pbkdf2_sha256$310000$307219e720c3770cb7450ae1f20f42fc$4a46a8cd09c0fa06ebde017d8f29844297b36234b37324d7639d2d16c28ef479",
-      "visits": 25501,
-      "id": "default",
-      "storeName": "باركودي - الإدارة العامة",
-      "storeLogo": "",
-      "username": "commander",
-      "products": []
-    },
     "1780527377828lkaj4d": {
-      "passwordHash": "pbkdf2_sha256$310000$1c5ea05349134b4f097899712d42b91a$2bcf3393a6907b8cc73600f0336beb6a7a75144f02e46eafbaab1b8eb3b77f26",
-      "visits": 3997,
       "id": "1780527377828lkaj4d",
+      "username": "matajer",
+      "passwordHash": "pbkdf2_sha256$310000$1c5ea05349134b4f097899712d42b91a$2bcf3393a6907b8cc73600f0336beb6a7a75144f02e46eafbaab1b8eb3b77f26",
       "storeName": "متاجر",
       "storeLogo": "",
-      "username": "matajer",
       "products": [
         {
           "id": "1780527837375",
@@ -26,9 +16,15 @@
           "description": "",
           "imageEmoji": "📦"
         }
-      ]
+      ],
+      "visits": 3997
     },
     "1780527677832x4h3pa": {
+      "id": "1780527677832x4h3pa",
+      "username": "tajmole",
+      "passwordHash": "pbkdf2_sha256$310000$1c5ea05349134b4f097899712d42b91a$2bcf3393a6907b8cc73600f0336beb6a7a75144f02e46eafbaab1b8eb3b77f26",
+      "storeName": "تاج مول",
+      "storeLogo": "",
       "products": [
         {
           "id": "1780527928731",
@@ -40,36 +36,43 @@
           "imageEmoji": "📦"
         }
       ],
-      "username": "tajmole",
-      "storeLogo": "",
-      "storeName": "تاج مول",
-      "passwordHash": "pbkdf2_sha256$310000$1c5ea05349134b4f097899712d42b91a$2bcf3393a6907b8cc73600f0336beb6a7a75144f02e46eafbaab1b8eb3b77f26",
-      "visits": 5590,
-      "id": "1780527677832x4h3pa"
+      "visits": 5590
     },
     "1780666579879t0iqph": {
-      "products": [],
-      "storeLogo": "",
+      "id": "1780666579879t0iqph",
       "username": "sultan",
-      "storeName": "سلطان ماركت",
       "passwordHash": "pbkdf2_sha256$310000$1c5ea05349134b4f097899712d42b91a$2bcf3393a6907b8cc73600f0336beb6a7a75144f02e46eafbaab1b8eb3b77f26",
-      "id": "1780666579879t0iqph"
+      "storeName": "سلطان ماركت",
+      "storeLogo": "",
+      "products": [],
+      "visits": 0
     },
     "1780666609057ayxyb9": {
-      "products": [],
-      "username": "dddd",
-      "storeLogo": "",
-      "storeName": "Xxxd",
       "id": "1780666609057ayxyb9",
-      "passwordHash": "pbkdf2_sha256$310000$0ff8b84af5d69f66d8bd01053272436e$22fa232cb351225b32317cb3a2c7fcb37e6655b0ac2b9b4521bb7623ad08216f"
+      "username": "dddd",
+      "passwordHash": "pbkdf2_sha256$310000$0ff8b84af5d69f66d8bd01053272436e$22fa232cb351225b32317cb3a2c7fcb37e6655b0ac2b9b4521bb7623ad08216f",
+      "storeName": "Xxxd",
+      "storeLogo": "",
+      "products": [],
+      "visits": 0
     },
     "1780666629464xxtvzc": {
-      "products": [],
-      "username": "rtt",
-      "storeLogo": "",
-      "storeName": "Tttt",
       "id": "1780666629464xxtvzc",
-      "passwordHash": "pbkdf2_sha256$310000$51dcdd7f42e7620144358982d2a9e604$2b22b5e83254626d23d2699a0112feedb07aabfc5753ebce782c789711aa09ec"
+      "username": "rtt",
+      "passwordHash": "pbkdf2_sha256$310000$51dcdd7f42e7620144358982d2a9e604$2b22b5e83254626d23d2699a0112feedb07aabfc5753ebce782c789711aa09ec",
+      "storeName": "Tttt",
+      "storeLogo": "",
+      "products": [],
+      "visits": 0
+    },
+    "default": {
+      "id": "default",
+      "username": "commander",
+      "passwordHash": "pbkdf2_sha256$310000$307219e720c3770cb7450ae1f20f42fc$4a46a8cd09c0fa06ebde017d8f29844297b36234b37324d7639d2d16c28ef479",
+      "storeName": "باركودي - الإدارة العامة",
+      "storeLogo": "",
+      "products": [],
+      "visits": 26259
     }
   }
 }
