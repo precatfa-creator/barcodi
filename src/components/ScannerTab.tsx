@@ -198,54 +198,48 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         });
         scannerInstanceRef.current = html5QrCode;
 
-        const availableCameras = await Html5Qrcode.getCameras().catch(() => []);
-        if (availableCameras.length > 0) {
-          setCameras(availableCameras);
-        }
+        // CRITICAL: Do NOT call getCameras() before start(). Enumerating devices
+        // opens its own camera stream to read labels; starting a second stream
+        // right after causes NotReadableError ("could not start video source")
+        // on many phones (iOS Safari, some Android Chrome). Instead start
+        // directly with the rear-facing camera constraint and enumerate cameras
+        // only AFTER a successful start (see loadCameras() in the success path).
+        const scanConfig = {
+          fps: 15,
+          qrbox: (viewWidth: number, viewHeight: number) => {
+            // Use 90% of the smaller dimension for a generous scan area
+            const minDim = Math.min(viewWidth, viewHeight);
+            const size = Math.floor(minDim * 0.9);
+            return { width: size, height: Math.floor(size * 0.55) };
+          },
+          aspectRatio: 1.333,
+          disableFlip: false,
+        };
 
-        const preferredCamera = [...availableCameras]
-          .sort((a, b) => cameraLabelScore(b.label || '') - cameraLabelScore(a.label || ''))[0];
+        const onScanError = (errorMessage: string) => {
+          // This fires when no barcode is found in a frame — normal, ignore.
+          // Only log unexpected errors for debugging.
+          if (errorMessage && !errorMessage.includes('NotFoundException')) {
+            console.debug('Scan frame error:', errorMessage);
+          }
+        };
 
         isStartingRef.current = true;
         try {
           await html5QrCode.start(
-            preferredCamera?.id || { facingMode: "environment" },
-            {
-              fps: 15,
-              qrbox: (viewWidth: number, viewHeight: number) => {
-                // Use 90% of the smaller dimension for a generous scan area
-                const minDim = Math.min(viewWidth, viewHeight);
-                const size = Math.floor(minDim * 0.9);
-                return { width: size, height: Math.floor(size * 0.55) };
-              },
-              aspectRatio: 1.333,
-              disableFlip: false,
-            },
+            { facingMode: { ideal: "environment" } },
+            scanConfig,
             handleBarcodeScanned,
-            (errorMessage: string) => {
-              // This fires when no barcode is found in a frame — normal, ignore.
-              // Only log unexpected errors for debugging.
-              if (errorMessage && !errorMessage.includes('NotFoundException')) {
-                console.debug('Scan frame error:', errorMessage);
-              }
-            }
+            onScanError
           );
         } catch (startErr) {
-          console.warn("Preferred camera failed, trying generic camera constraints:", startErr);
+          console.warn("Rear camera failed, trying any available camera:", startErr);
           if (isMountedRef.current) {
             await html5QrCode.start(
-              { facingMode: { ideal: "environment" } },
-              {
-                fps: 12,
-                qrbox: (viewWidth: number, viewHeight: number) => {
-                  const minDim = Math.min(viewWidth, viewHeight);
-                  const size = Math.floor(minDim * 0.9);
-                  return { width: size, height: Math.floor(size * 0.55) };
-                },
-                disableFlip: false
-              },
+              { facingMode: "user" },
+              scanConfig,
               handleBarcodeScanned,
-              () => {}
+              onScanError
             );
           }
         } finally {
