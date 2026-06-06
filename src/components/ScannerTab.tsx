@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef, FormEvent } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { Camera, Barcode, AlertTriangle, CornerDownLeft, Sparkles, Zap, ZapOff } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, FormEvent } from 'react';
+import Webcam from 'react-webcam';
+import { BarcodeDetector } from 'barcode-detector';
+import { Camera, Barcode, AlertTriangle, CornerDownLeft, Sparkles, Zap, ZapOff, FlipHorizontal } from 'lucide-react';
 import { Product, AppSettings } from '../types';
 import { useAppContext } from '../AppContext';
 
@@ -13,43 +14,6 @@ interface ScannerTabProps {
   onProductFound: (product: Product) => void;
   settings: AppSettings;
   isPaused?: boolean;
-}
-
-const barcodeFormats = [
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
-  Html5QrcodeSupportedFormats.UPC_A,
-  Html5QrcodeSupportedFormats.UPC_E,
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.CODE_93,
-  Html5QrcodeSupportedFormats.ITF,
-];
-
-const cameraLabelScore = (label: string) => {
-  const normalized = label.toLowerCase();
-  if (/back|rear|environment|خلف|خلفية/.test(normalized)) return 3;
-  if (/camera 0|camera1|0/.test(normalized)) return 2;
-  return 1;
-};
-
-// Graceful safety net for third-party media play() interruptions
-if (typeof window !== 'undefined' && window.HTMLMediaElement) {
-  const originalPlay = window.HTMLMediaElement.prototype.play;
-  window.HTMLMediaElement.prototype.play = function (...args) {
-    const promise = originalPlay.apply(this, args);
-    if (promise instanceof Promise) {
-      promise.catch((err) => {
-        const isAbort = err?.name === 'AbortError' || err?.message?.includes('interrupted') || err?.message?.includes('removed');
-        if (isAbort) {
-          console.debug('Handled and suppressed play() interruption:', err);
-        } else {
-          console.warn('HTMLMediaElement.play() rejected:', err);
-        }
-      });
-    }
-    return promise;
-  };
 }
 
 // Crisp Synthesized Store Beep Sound
@@ -62,7 +26,7 @@ export function playBeepSound() {
     const gainNode = audioCtx.createGain();
     
     oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(950, audioCtx.currentTime); // High pitch supermarket beep
+    oscillator.frequency.setValueAtTime(950, audioCtx.currentTime);
     gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
     
@@ -78,49 +42,68 @@ export function playBeepSound() {
 
 export function ScannerTab({ onProductFound, settings, isPaused = false }: ScannerTabProps) {
   const { products } = useAppContext();
+  
+  // Refs to avoid closure issues with the scan loop
+  const productsRef = useRef(products);
+  productsRef.current = products;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const onProductFoundRef = useRef(onProductFound);
+  onProductFoundRef.current = onProductFound;
+  
+  // State
   const [activeMode, setActiveMode] = useState<'camera' | 'manual'>('camera');
   const [manualCode, setManualCode] = useState('');
   const [manualError, setManualError] = useState('');
   
-  // Camera state
-  const [isCameraActive, setIsCameraActive] = useState(true);
+  const [cameraManuallyStopped, setCameraManuallyStopped] = useState(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [hasFlashlight, setHasFlashlight] = useState(false);
   const [isFlashlightOn, setIsFlashlightOn] = useState(false);
-  const [cameras, setCameras] = useState<{ id: string; label: string }[]>([]);
+  const [detectorReady, setDetectorReady] = useState(false);
   
-  const scannerInstanceRef = useRef<Html5Qrcode | null>(null);
-
-  // Precision Timeout Refs and Mount Guard to prevent async race conditions & play() interruptions
-  const isMountedRef = useRef(true);
-  const isStartingRef = useRef<boolean>(false);
-  const startTimeoutRef1 = useRef<any>(null);
-  const startTimeoutRef2 = useRef<any>(null);
-
+  const webcamRef = useRef<Webcam>(null);
+  const detectorRef = useRef<any>(null);
+  const rafRef = useRef<number | null>(null);
+  const scanningRef = useRef(false);
+  const detectingRef = useRef(false);
+  
+  // Initialize BarcodeDetector once on mount
   useEffect(() => {
-    isMountedRef.current = true;
-    if (activeMode === 'camera' && !isPaused) {
-      if (startTimeoutRef1.current) clearTimeout(startTimeoutRef1.current);
-      startTimeoutRef1.current = setTimeout(() => {
-        if (isMountedRef.current) {
-          startCameraScanner();
+    let cancelled = false;
+    (async () => {
+      try {
+        // Uses native BarcodeDetector if available, otherwise polyfills with ZXing WASM
+        const detector = new (BarcodeDetector as any)({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'qr_code']
+        });
+        if (!cancelled) {
+          detectorRef.current = detector;
+          setDetectorReady(true);
         }
-      }, 300);
-    } else {
-      stopCameraScanner();
-    }
-    return () => {
-      isMountedRef.current = false;
-      if (startTimeoutRef1.current) clearTimeout(startTimeoutRef1.current);
-      if (startTimeoutRef2.current) clearTimeout(startTimeoutRef2.current);
-      stopCameraScanner();
-    };
-  }, [activeMode, isPaused]);
-
-  const handleBarcodeScanned = (decodedText: string) => {
+      } catch (err) {
+        console.error('BarcodeDetector initialization failed:', err);
+        if (!cancelled) {
+          setCameraError('تعذر تحميل قارئ الباركود في المتصفح. جرّب Chrome أو Safari حديث.');
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  
+  // Barcode scan handler
+  const handleBarcodeScanned = useCallback((decodedText: string) => {
     playBeepSound();
-    stopCameraScanner();
-
+    scanningRef.current = false;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    
+    const settings = settingsRef.current;
     if (settings.isTestMode) {
       const mockProduct: Product = {
         id: `mock-${Date.now()}`,
@@ -132,270 +115,199 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         weight: 'قطعة واحدة',
         description: 'هذا منتج وهمي تم إنشاؤه أثناء وضع الاختبار.'
       };
-      onProductFound(mockProduct);
+      onProductFoundRef.current(mockProduct);
       return;
     }
-
-    const cleanBarcode = decodedText.trim();
-    const p = products.find(
-      (product) => product.barcode === cleanBarcode || product.id === cleanBarcode
-    );
+    
+    const clean = decodedText.trim();
+    const p = productsRef.current.find(pr => pr.barcode === clean || pr.id === clean);
     if (p) {
-      onProductFound(p);
+      onProductFoundRef.current(p);
     } else {
       setCameraError(`عذراً، الرمز (${decodedText}) ممسوح وغير مسجل لدينا في متجر النخبة.`);
     }
-  };
-
-  const loadCameras = async () => {
-    try {
-      const devices = await Html5Qrcode.getCameras();
-      if (devices && devices.length > 0) {
-        setCameras(devices);
-      }
-    } catch (err) {
-      console.log("Failed to load cameras on demand:", err);
-    }
-  };
-
-  // REMOVED: mount-time loadCameras() — it opens a hidden camera stream to
-  // enumerate devices, which is NOT tracked by scannerInstanceRef, so
-  // stopCameraScanner() can never close it. The competing stream then causes
-  // NotReadableError ("camera already in use") when start() runs moments later.
-  // Camera enumeration is instead handled safely inside startCameraScanner()
-  // after permission is granted and no other stream is active.
-
-  const startCameraScanner = async () => {
-    setCameraError('');
-    setIsCameraActive(true);
-
-    if (startTimeoutRef2.current) clearTimeout(startTimeoutRef2.current);
-
-    // Timeout-delay to allow target div to render
-    startTimeoutRef2.current = setTimeout(async () => {
-      if (!isMountedRef.current) return;
-      try {
-        if (!window.isSecureContext) {
-          setCameraError("الكاميرا تحتاج اتصال آمن HTTPS. على Render استخدم رابط https، ومحلياً استخدم http://localhost وليس عنوان IP عادي.");
-          setIsCameraActive(false);
-          return;
-        }
-
-        if (!navigator.mediaDevices?.getUserMedia) {
-          setCameraError("هذا المتصفح لا يدعم تشغيل الكاميرا من صفحة الويب. جرّب Chrome أو Safari حديث.");
-          setIsCameraActive(false);
-          return;
-        }
-
-        const scannerId = "camera-viewfinder-output";
-        const element = document.getElementById(scannerId);
-        if (!element || !isMountedRef.current) return;
-
-        await stopCameraScanner();
-
-        // CRITICAL: Do NOT call getCameras() before start(). Enumerating devices
-        // opens its own camera stream to read labels; starting a second stream
-        // right after causes NotReadableError ("could not start video source")
-        // on many phones (iOS Safari, some Android Chrome). Instead start
-        // directly with the rear-facing camera constraint and enumerate cameras
-        // only AFTER a successful start (see loadCameras() in the success path).
-        const scanConfig = {
-          fps: 15,
-          qrbox: (viewWidth: number, viewHeight: number) => {
-            // Use 90% of the smaller dimension for a generous scan area
-            const minDim = Math.min(viewWidth, viewHeight);
-            const size = Math.floor(minDim * 0.9);
-            return { width: size, height: Math.floor(size * 0.55) };
-          },
-          aspectRatio: 1.333,
-          disableFlip: false,
-        };
-
-        const onScanError = (errorMessage: string) => {
-          // This fires when no barcode is found in a frame — normal, ignore.
-          // Only log unexpected errors for debugging.
-          if (errorMessage && !errorMessage.includes('NotFoundException')) {
-            console.debug('Scan frame error:', errorMessage);
-          }
-        };
-
-        isStartingRef.current = true;
-        // Try multiple camera-acquisition strategies. IMPORTANT: html5-qrcode's
-        // internal state machine can get stuck ("already under transition") if
-        // start() fails and we try start() again on the same instance. So we
-        // create a FRESH instance for each strategy attempt and clear the DOM.
-        const startStrategies: Array<(scanner: Html5Qrcode) => Promise<void>> = [
-          // 1. Rear camera by facingMode (preferred on phones)
-          (s) => s.start({ facingMode: { ideal: "environment" } }, scanConfig, handleBarcodeScanned, onScanError),
-          // 2. Rear camera by explicit deviceId (permission is now granted, so labels are readable)
-          async (s) => {
-            const devices = await Html5Qrcode.getCameras().catch(() => []);
-            if (devices.length > 0) {
-              setCameras(devices);
-              const rear = [...devices].sort((a, b) => cameraLabelScore(b.label || '') - cameraLabelScore(a.label || ''))[0];
-              if (rear?.id) {
-                return s.start(rear.id, scanConfig, handleBarcodeScanned, onScanError);
-              }
-            }
-            throw new Error('No camera device id available');
-          },
-          // 3. Any available camera — let the browser pick
-          (s) => s.start({ facingMode: "user" }, scanConfig, handleBarcodeScanned, onScanError),
-        ];
-
-        let startedScanner: Html5Qrcode | null = null;
-        let lastError: any = null;
-        try {
-          for (let i = 0; i < startStrategies.length; i++) {
-            if (!isMountedRef.current) break;
-
-            // Create a FRESH instance for each attempt (prevents state machine corruption)
-            const html5QrCode = new Html5Qrcode(scannerId, {
-              formatsToSupport: barcodeFormats,
-              useBarCodeDetectorIfSupported: false,
-              verbose: false,
-            });
-            scannerInstanceRef.current = html5QrCode;
-
-            try {
-              await startStrategies[i](html5QrCode);
-              startedScanner = html5QrCode;
-              break;
-            } catch (stratErr) {
-              lastError = stratErr;
-              console.warn(`Camera start strategy ${i + 1} failed, trying next:`, stratErr?.name || stratErr, stratErr?.message || '');
-              // Fully cleanup the failed instance before creating a new one
-              try { await html5QrCode.stop(); } catch {}
-              try { html5QrCode.clear(); } catch {}
-              // Clear the container DOM so the next instance starts with an empty element
-              const container = document.getElementById(scannerId);
-              if (container) container.innerHTML = '';
-              scannerInstanceRef.current = null;
-            }
-          }
-        } finally {
-          isStartingRef.current = false;
-        }
-
-        if (!startedScanner) {
-          throw lastError || new Error('All camera start strategies failed');
-        }
-        scannerInstanceRef.current = startedScanner;
-
-        if (!isMountedRef.current) {
-          // If the component unmounted while the start promise was resolving, stop immediately
-          stopCameraScanner();
-          return;
-        }
-
-        // Successfully running
-        setIsCameraActive(true);
-        loadCameras();
-
-        // Detect if flashlight (torch) option is supported dynamically
-        try {
-          const track = (startedScanner as any).getRunningTrack();
-          if (track) {
-            const capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : {};
-            const supportsFlash = !!(capabilities as any).torch || 'torch' in capabilities;
-            setHasFlashlight(supportsFlash);
-          }
-        } catch (capErr) {
-          console.log("Slight delay or browser limitation on getCapabilities check:", capErr);
-        }
-      } catch (err: any) {
-        isStartingRef.current = false;
-        if (!isMountedRef.current) return;
-        const errName = err?.name || '';
-        const errStr = err?.toString?.() || '';
-        console.error('Camera failed to start. Error:', errName, err?.message || errStr, err);
-
-        if (errName === 'NotAllowedError' || errStr.includes('NotAllowedError') || errName === 'SecurityError') {
-           setManualError("لم يتم السماح بالوصول للكاميرا. يرجى إعطاء الصلاحية من متصفحك أو الإدخال يدوياً هنا، (قد تحتاج لفتح التطبيق في تبويب جديد).");
-           setActiveMode('manual');
-        } else if (errName === 'NotReadableError' || errStr.includes('NotReadableError')) {
-           setCameraError("الكاميرا قيد الاستخدام من تطبيق آخر. أغلق أي تطبيق يستخدم الكاميرا (مثل تطبيق الكاميرا أو تطبيق مكالمات) ثم أعد المحاولة.");
-        } else if (errName === 'NotFoundError' || errName === 'OverconstrainedError' || errStr.includes('OverconstrainedError')) {
-           setCameraError("لم يتم العثور على كاميرا مناسبة على هذا الجهاز. استخدم الإدخال اليدوي بالأسفل.");
-        } else {
-           setCameraError(`تعذر تشغيل الكاميرا (${errName || 'خطأ غير معروف'}). يرجى التأكد من إعطاء الصلاحية أو استخدم الإدخال اليدوي بالأسفل.`);
-        }
-
-        setIsCameraActive(false);
-      }
-    }, 200);
-  };
-
-  const stopCameraScanner = async () => {
-    if (startTimeoutRef1.current) clearTimeout(startTimeoutRef1.current);
-    if (startTimeoutRef2.current) clearTimeout(startTimeoutRef2.current);
-
-    // If camera is currently starting up, delay the stop call gracefully to avoid play() interruption
-    if (isStartingRef.current) {
-      setTimeout(() => {
-        stopCameraScanner();
-      }, 100);
+  }, []);
+  
+  // Scan loop — detects barcodes from video frames
+  const scanLoop = useCallback(async () => {
+    if (!scanningRef.current || !webcamRef.current?.video || !detectorRef.current || detectingRef.current) {
       return;
     }
-
-    if (scannerInstanceRef.current) {
-      const scanner = scannerInstanceRef.current;
-      scannerInstanceRef.current = null;
-      if (scanner.isScanning) {
-        try {
-          await scanner.stop();
-        } catch (err) {
-          console.error("Error stopping camera", err);
-        }
+    
+    const video = webcamRef.current.video;
+    if (video.readyState < 2) {
+      // Video not ready yet — try again next frame
+      if (scanningRef.current) {
+        rafRef.current = requestAnimationFrame(scanLoop);
       }
+      return;
     }
-    setIsCameraActive(false);
-    setIsFlashlightOn(false);
-    setHasFlashlight(false);
-  };
-
-  const toggleFlashlight = async () => {
-    if (!scannerInstanceRef.current) return;
+    
+    detectingRef.current = true;
     try {
-      const track = (scannerInstanceRef.current as any).getRunningTrack();
-      if (track) {
-        const nextState = !isFlashlightOn;
-        await track.applyConstraints({
-          advanced: [{ torch: nextState } as any]
-        });
-        setIsFlashlightOn(nextState);
+      const barcodes = await detectorRef.current.detect(video);
+      if (barcodes.length > 0 && scanningRef.current) {
+        handleBarcodeScanned(barcodes[0].rawValue);
+        detectingRef.current = false;
+        return; // Don't schedule next frame
       }
     } catch (err) {
-      console.error("Failed to toggle flashlight:", err);
+      // Transient detection errors — ignore and continue
+    }
+    detectingRef.current = false;
+    
+    // Throttle to ~10 fps (every 100ms) to save CPU/battery
+    if (scanningRef.current) {
+      setTimeout(() => {
+        if (scanningRef.current) {
+          rafRef.current = requestAnimationFrame(scanLoop);
+        }
+      }, 100);
+    }
+  }, [handleBarcodeScanned]);
+  
+  // When webcam stream is ready, check torch support and start scanning
+  const handleUserMedia = useCallback(() => {
+    setIsCameraReady(true);
+    setCameraError('');
+    
+    const stream = webcamRef.current?.video?.srcObject as MediaStream | undefined;
+    if (stream) {
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        const caps: any = track.getCapabilities?.() || {};
+        setHasFlashlight(!!caps.torch);
+      }
+    }
+    
+    // Start scanning if not paused and detector is ready
+    if (!isPaused && detectorRef.current) {
+      scanningRef.current = true;
+      scanLoop();
+    }
+  }, [isPaused, scanLoop]);
+  
+  // Handle webcam errors
+  const handleUserMediaError = useCallback((err: any) => {
+    console.error('Webcam error:', err);
+    setIsCameraReady(false);
+    
+    const errName = err?.name || '';
+    const errStr = err?.message || err?.toString?.() || '';
+    
+    if (errName === 'NotAllowedError' || errStr.includes('NotAllowedError') || errName === 'SecurityError') {
+      setManualError("لم يتم السماح بالوصول للكاميرا. يرجى إعطاء الصلاحية من متصفحك أو الإدخال يدوياً هنا، (قد تحتاج لفتح التطبيق في تبويب جديد).");
+      setActiveMode('manual');
+    } else if (errName === 'NotReadableError' || errStr.includes('NotReadableError')) {
+      setCameraError("الكاميرا قيد الاستخدام من تطبيق آخر. أغلق أي تطبيق يستخدم الكاميرا ثم أعد المحاولة.");
+    } else {
+      setCameraError(`تعذر تشغيل الكاميرا (${errName || 'خطأ غير معروف'}). استخدم الإدخال اليدوي بالأسفل.`);
+    }
+  }, []);
+  
+  // Pause/resume scanning based on isPaused prop
+  useEffect(() => {
+    if (!isPaused && isCameraReady && detectorRef.current) {
+      scanningRef.current = true;
+      scanLoop();
+    } else {
+      scanningRef.current = false;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    }
+    
+    return () => {
+      scanningRef.current = false;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, [isPaused, isCameraReady, scanLoop]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      scanningRef.current = false;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+  }, []);
+  
+  // Flashlight toggle
+  const toggleFlashlight = async () => {
+    const track = (webcamRef.current?.video?.srcObject as MediaStream)?.getVideoTracks()[0];
+    if (!track) return;
+    
+    const nextState = !isFlashlightOn;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: nextState } as any]
+      });
+      setIsFlashlightOn(nextState);
+    } catch (err) {
+      console.error('Failed to toggle flashlight:', err);
     }
   };
-
+  
+  // Switch camera front/back
+  const switchCamera = () => {
+    scanningRef.current = false;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    setIsCameraReady(false);
+    setIsFlashlightOn(false);
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+  };
+  
+  // Manual input submit
   const handleManualSubmit = (e: FormEvent) => {
     e.preventDefault();
     setManualError('');
     const clean = manualCode.trim();
     if (!clean) return;
-
     handleBarcodeScanned(clean);
   };
-
+  
+  // Toggle camera on/off
   const toggleCamera = () => {
-    if (isCameraActive) {
-      stopCameraScanner();
+    if (cameraManuallyStopped) {
+      setCameraManuallyStopped(false);
     } else {
-      startCameraScanner();
+      scanningRef.current = false;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      setIsCameraReady(false);
+      setIsFlashlightOn(false);
+      setCameraManuallyStopped(true);
     }
   };
-
+  
+  const isEng = settings.language === 'en';
+  const showWebcam = activeMode === 'camera' && !cameraManuallyStopped;
+  
+  const videoConstraints: MediaTrackConstraints = {
+    facingMode: { ideal: facingMode },
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+  };
+  
   return (
     <div className="flex flex-col gap-6" id="scanner-tab-container">
       {/* Visual Tab Buttons for Scanner Mode */}
       <div className="grid grid-cols-2 gap-1 bg-white/40 p-1.5 rounded-2xl border border-white shadow-sm" id="scanner-modes-header">
         <button
-          onClick={() => {
-            setActiveMode('camera');
-          }}
-          className={`py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 ${
+          onClick={() => setActiveMode('camera')}
+          disabled={!detectorReady}
+          className={`py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 disabled:opacity-50 ${
             activeMode === 'camera'
               ? 'bg-white text-primary-dark shadow-[0_2px_10px_rgba(0,0,0,0.05)] border border-primary-light/30'
               : 'text-gray-500 hover:text-gray-800'
@@ -403,13 +315,11 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
           id="btn-mode-camera"
         >
           <Barcode className="w-4.5 h-4.5" />
-          <span>{settings.language === 'en' ? 'Camera Scan' : 'المسح الضوئي بالكاميرا'}</span>
+          <span>{isEng ? 'Camera Scan' : 'المسح الضوئي بالكاميرا'}</span>
         </button>
 
         <button
-          onClick={() => {
-            setActiveMode('manual');
-          }}
+          onClick={() => setActiveMode('manual')}
           className={`py-2.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-1.5 ${
             activeMode === 'manual'
               ? 'bg-white text-primary-dark shadow-[0_2px_10px_rgba(0,0,0,0.05)] border border-primary-light/30'
@@ -418,7 +328,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
           id="btn-mode-manual"
         >
           <div className="flex items-center justify-center text-[9px] font-bold tracking-wider font-mono bg-primary-pale text-primary-dark border border-primary-light/30 px-1.5 h-4.5 rounded">6281001234567</div>
-          <span>{settings.language === 'en' ? 'Manual Barcode' : 'إدخال الباركود يدوياً'}</span>
+          <span>{isEng ? 'Manual Barcode' : 'إدخال الباركود يدوياً'}</span>
         </button>
       </div>
 
@@ -429,7 +339,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         </div>
       )}
 
-      {/* Mode 1: Real Camera Scanning (using html5-qrcode) */}
+      {/* Mode 1: Real Camera Scanning (using react-webcam + BarcodeDetector) */}
       {activeMode === 'camera' && (
         <div className="flex flex-col gap-4 animate-fade-in shrink-0 bg-white/40 p-4 rounded-[2rem] border border-white shadow-sm" id="camera-view">
           <div className="text-center">
@@ -439,28 +349,50 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
 
           {/* Camera Frame Viewport */}
           <div className="relative w-full aspect-[4/3] max-w-sm mx-auto bg-gray-950 rounded-3xl border-[6px] border-gray-900 shadow-inner overflow-hidden flex items-center justify-center">
-            {/* Camera Viewfinder Container (Always inside the DOM to prevent browser play() exception) */}
-            <div 
-              id="camera-viewfinder-output" 
-              className={`w-full h-full object-cover relative ${isCameraActive ? 'block' : 'hidden'}`} 
-            />
+            {showWebcam ? (
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                videoConstraints={videoConstraints}
+                onUserMedia={handleUserMedia}
+                onUserMediaError={handleUserMediaError}
+                className="w-full h-full object-cover absolute inset-0"
+                mirrored={facingMode === 'user'}
+                screenshotFormat="image/jpeg"
+                playsInline
+                autoPlay
+                muted
+              />
+            ) : null}
 
-            {/* Inactive System Overlay screen */}
-            <div className={`flex flex-col items-center justify-center gap-4 p-8 text-center text-gray-400 bg-gray-900/60 w-full h-full absolute inset-0 z-0 ${isCameraActive ? 'hidden' : 'flex'}`}>
-              <div className="w-16 h-16 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-primary-light shadow-md animate-pulse">
-                <Camera className="w-8 h-8" />
+            {/* Loading state while Webcam mounts */}
+            {showWebcam && !isCameraReady && (
+              <div className="flex flex-col items-center justify-center gap-4 p-8 text-center text-gray-400 bg-gray-900/60 w-full h-full absolute inset-0 z-10">
+                <div className="w-16 h-16 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-primary-light shadow-md animate-pulse">
+                  <Camera className="w-8 h-8" />
+                </div>
+                <p className="text-[11px] tracking-wide font-medium max-w-[200px] leading-relaxed text-gray-300">جاري الاتصال بالكاميرا...</p>
               </div>
-              <p className="text-[11px] tracking-wide font-medium max-w-[200px] leading-relaxed text-gray-300">نظام المسح جاهز لتلقي إشارة الكاميرا والبدء.</p>
-              <button
-                onClick={toggleCamera}
-                className="bg-primary-dark hover:bg-gray-900 px-6 py-3 rounded-2xl text-xs font-bold text-white transition-all shadow-lg flex items-center gap-2"
-              >
-                <Sparkles className="w-4 h-4 text-primary-pale" />
-                <span>تفعيل عدسة المسح</span>
-              </button>
-            </div>
+            )}
 
-            {isCameraActive && (
+            {/* Inactive System Overlay screen (when manually stopped) */}
+            {cameraManuallyStopped && (
+              <div className="flex flex-col items-center justify-center gap-4 p-8 text-center text-gray-400 bg-gray-900/60 w-full h-full absolute inset-0 z-0">
+                <div className="w-16 h-16 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center text-primary-light shadow-md animate-pulse">
+                  <Camera className="w-8 h-8" />
+                </div>
+                <p className="text-[11px] tracking-wide font-medium max-w-[200px] leading-relaxed text-gray-300">الكاميرا موقفة. اضغط للتفعيل.</p>
+                <button
+                  onClick={toggleCamera}
+                  className="bg-primary-dark hover:bg-gray-900 px-6 py-3 rounded-2xl text-xs font-bold text-white transition-all shadow-lg flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4 text-primary-pale" />
+                  <span>تفعيل عدسة المسح</span>
+                </button>
+              </div>
+            )}
+
+            {isCameraReady && (
               <>
                 {/* Modern subtle corner frames for active indicator scanning boundaries */}
                 <div className="absolute top-4 left-4 w-6 h-6 border-t-[3px] border-l-[3px] border-primary-dark rounded-tl-xl pointer-events-none" />
@@ -471,6 +403,18 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
                 {/* Neo glowing laser scanning bar sweeping smoothly vertically across the entire viewport */}
                 <div className="absolute left-0 right-0 h-[3px] bg-emerald-400 shadow-[0_0_20px_#10b981,0_0_8px_#10b981] animate-laser pointer-events-none z-10" style={{ top: '0%' }} />
 
+                {/* Switch camera (front/back) button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    switchCamera();
+                  }}
+                  className="absolute top-4 right-4 z-20 p-2.5 rounded-xl backdrop-blur-md bg-black/60 text-white border border-white/20 shadow-md transition-all cursor-pointer hover:bg-black/85 hover:scale-105"
+                  title={isEng ? "Switch Camera" : "تبديل الكاميرا"}
+                >
+                  <FlipHorizontal className="w-4 h-4 text-white" />
+                </button>
+
                 {/* Flashlight/Torch toggle button */}
                 {hasFlashlight && (
                   <button
@@ -478,12 +422,12 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
                       e.stopPropagation();
                       toggleFlashlight();
                     }}
-                    className={`absolute top-4 left-4 z-20 p-2.5 rounded-xl backdrop-blur-md border shadow-md transition-all cursor-pointer ${
+                    className={`absolute top-16 right-4 z-20 p-2.5 rounded-xl backdrop-blur-md border shadow-md transition-all cursor-pointer ${
                       isFlashlightOn 
                         ? 'bg-amber-500 text-white border-amber-400 font-bold scale-105 shadow-amber-500/20' 
                         : 'bg-black/60 text-white border-white/20 hover:bg-black/85 hover:scale-105'
                     }`}
-                    title={isFlashlightOn ? "إيقاف الكشاف" : "تشغيل الكشاف"}
+                    title={isFlashlightOn ? (isEng ? "Turn Off Flash" : "إيقاف الكشاف") : (isEng ? "Turn On Flash" : "تشغيل الكشاف")}
                   >
                     {isFlashlightOn ? <ZapOff className="w-4 h-4 text-white animate-pulse" /> : <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />}
                   </button>
@@ -502,14 +446,12 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
                     }}
                     className="text-gray-300 hover:text-white bg-white/10 px-3 py-1 rounded-md cursor-pointer pointer-events-auto transition-colors font-sans"
                   >
-                    إيقاف
+                    {isEng ? 'Stop' : 'إيقاف'}
                   </button>
                 </div>
               </>
             )}
           </div>
-
-
 
           {cameraError && (
             <div className="bg-rose-50 border border-rose-100 text-rose-800 text-xs rounded-xl p-3 flex gap-2 items-start leading-relaxed shadow-sm mt-2">
