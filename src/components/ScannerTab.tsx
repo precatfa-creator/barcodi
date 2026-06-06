@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef, FormEvent } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Camera, Barcode, AlertTriangle, CornerDownLeft, Sparkles, Zap, ZapOff } from 'lucide-react';
 import { Product, AppSettings } from '../types';
 import { useAppContext } from '../AppContext';
@@ -14,6 +14,24 @@ interface ScannerTabProps {
   settings: AppSettings;
   isPaused?: boolean;
 }
+
+const barcodeFormats = [
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.CODE_93,
+  Html5QrcodeSupportedFormats.ITF,
+];
+
+const cameraLabelScore = (label: string) => {
+  const normalized = label.toLowerCase();
+  if (/back|rear|environment|خلف|خلفية/.test(normalized)) return 3;
+  if (/camera 0|camera1|0/.test(normalized)) return 2;
+  return 1;
+};
 
 // Graceful safety net for third-party media play() interruptions
 if (typeof window !== 'undefined' && window.HTMLMediaElement) {
@@ -155,39 +173,59 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     startTimeoutRef2.current = setTimeout(async () => {
       if (!isMountedRef.current) return;
       try {
+        if (!window.isSecureContext) {
+          setCameraError("الكاميرا تحتاج اتصال آمن HTTPS. على Render استخدم رابط https، ومحلياً استخدم http://localhost وليس عنوان IP عادي.");
+          setIsCameraActive(false);
+          return;
+        }
+
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setCameraError("هذا المتصفح لا يدعم تشغيل الكاميرا من صفحة الويب. جرّب Chrome أو Safari حديث.");
+          setIsCameraActive(false);
+          return;
+        }
+
         const scannerId = "camera-viewfinder-output";
         const element = document.getElementById(scannerId);
         if (!element || !isMountedRef.current) return;
 
-        const html5QrCode = new Html5Qrcode(scannerId);
+        await stopCameraScanner();
+
+        const html5QrCode = new Html5Qrcode(scannerId, {
+          formatsToSupport: barcodeFormats,
+          useBarCodeDetectorIfSupported: true,
+        });
         scannerInstanceRef.current = html5QrCode;
+
+        const availableCameras = await Html5Qrcode.getCameras().catch(() => []);
+        if (availableCameras.length > 0) {
+          setCameras(availableCameras);
+        }
+
+        const preferredCamera = [...availableCameras]
+          .sort((a, b) => cameraLabelScore(b.label || '') - cameraLabelScore(a.label || ''))[0];
 
         isStartingRef.current = true;
         try {
           await html5QrCode.start(
-            { facingMode: "environment" },
+            preferredCamera?.id || { facingMode: "environment" },
             {
-              fps: 30, // زيادة معدل الإطارات في الثانية لرفع الحساسية وسرعة القراءة
-              aspectRatio: 1.0, // الحفاظ على دقة التركيز
-              disableFlip: false, // السماح بالمسح في مختلف الزوايا لتحسين الدقة
-              videoConstraints: {
-                facingMode: "environment",
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
-              }
+              fps: 12,
+              qrbox: { width: 280, height: 180 },
+              aspectRatio: 1.333,
+              disableFlip: false,
             },
             handleBarcodeScanned,
             () => {} // silence errors
           );
         } catch (startErr) {
-          console.warn("Attempt with custom constraint failed, trying basic environment facing mode:", startErr);
-          // Fallback to basic environment facing mode if constraint is too strict
+          console.warn("Preferred camera failed, trying generic camera constraints:", startErr);
           if (isMountedRef.current) {
             await html5QrCode.start(
-              { facingMode: "environment" },
+              { facingMode: { ideal: "environment" } },
               {
-                fps: 30,
-                aspectRatio: 1.0,
+                fps: 10,
+                qrbox: { width: 260, height: 180 },
                 disableFlip: false
               },
               handleBarcodeScanned,
@@ -205,6 +243,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         }
 
         // Successfully running
+        setIsCameraActive(true);
         loadCameras();
 
         // Detect if flashlight (torch) option is supported dynamically
