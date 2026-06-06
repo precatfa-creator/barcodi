@@ -254,6 +254,51 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     }
   };
   
+  // Tap-to-focus: refocuses camera on the tapped location (essential for small barcodes)
+  const handleTapToFocus = async (e: React.MouseEvent | React.TouchEvent) => {
+    const track = (webcamRef.current?.video?.srcObject as MediaStream)?.getVideoTracks()[0];
+    if (!track) return;
+    
+    const container = e.currentTarget as HTMLElement;
+    const rect = container.getBoundingClientRect();
+    
+    let clientX: number, clientY: number;
+    if ('touches' in e) {
+      if (e.touches.length === 0) return;
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    
+    const xRatio = (clientX - rect.left) / rect.width;
+    const yRatio = (clientY - rect.top) / rect.height;
+    
+    try {
+      // Try to use ImageCapture for precise point-of-interest focus
+      const caps: any = track.getCapabilities?.() || {};
+      if (caps.pointsOfInterest) {
+        await track.applyConstraints({
+          advanced: [{ pointsOfInterest: [{ x: xRatio, y: yRatio }] } as any]
+        });
+      } else if (caps.focusMode?.includes('single-shot')) {
+        // Fallback: trigger single-shot autofocus, then let continuous resume
+        await track.applyConstraints({
+          advanced: [{ focusMode: 'single-shot' as any }]
+        });
+        // Return to continuous after brief focus
+        setTimeout(() => {
+          track.applyConstraints({
+            advanced: [{ focusMode: 'continuous' as any }]
+          }).catch(() => {});
+        }, 1500);
+      }
+    } catch (err) {
+      // Focus point API not supported on this device — silent fail
+    }
+  };
+  
   // Switch camera front/back
   const switchCamera = () => {
     scanningRef.current = false;
@@ -296,8 +341,14 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
   
   const videoConstraints: MediaTrackConstraints = {
     facingMode: { ideal: facingMode },
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
+    width: { ideal: 1920, min: 1280 },
+    height: { ideal: 1080, min: 720 },
+    aspectRatio: { ideal: 16 / 9 },
+    // Continuous autofocus — critical for phone barcode scanning
+    advanced: [
+      { focusMode: 'continuous' as any },
+      { focusMode: 'auto' as any }, // fallback for older browsers
+    ],
   };
   
   return (
@@ -348,7 +399,11 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
           </div>
 
           {/* Camera Frame Viewport */}
-          <div className="relative w-full aspect-[4/3] max-w-sm mx-auto bg-gray-950 rounded-3xl border-[6px] border-gray-900 shadow-inner overflow-hidden flex items-center justify-center">
+          <div
+            className="relative w-full aspect-[4/3] max-w-sm mx-auto bg-gray-950 rounded-3xl border-[6px] border-gray-900 shadow-inner overflow-hidden flex items-center justify-center cursor-pointer"
+            onClick={handleTapToFocus}
+            onTouchStart={handleTapToFocus}
+          >
             {showWebcam ? (
               <Webcam
                 ref={webcamRef}
