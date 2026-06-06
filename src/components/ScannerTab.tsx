@@ -158,10 +158,12 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     }
   };
 
-  // Attempt to check if permissions were already granted to load list early
-  useEffect(() => {
-    loadCameras();
-  }, []);
+  // REMOVED: mount-time loadCameras() — it opens a hidden camera stream to
+  // enumerate devices, which is NOT tracked by scannerInstanceRef, so
+  // stopCameraScanner() can never close it. The competing stream then causes
+  // NotReadableError ("camera already in use") when start() runs moments later.
+  // Camera enumeration is instead handled safely inside startCameraScanner()
+  // after permission is granted and no other stream is active.
 
   const startCameraScanner = async () => {
     setCameraError('');
