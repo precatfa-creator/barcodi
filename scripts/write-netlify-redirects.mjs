@@ -10,16 +10,13 @@ if (!fs.existsSync(distDir)) {
   throw new Error('dist directory does not exist. Run the Vite build before generating Netlify redirects.');
 }
 
-if (isNetlifyBuild && !backendUrl) {
-  throw new Error('BACKEND_URL is required for Netlify production builds so /api/* can proxy to Cloud Run.');
-}
-
 const lines = [];
 
 if (backendUrl) {
   lines.push(`/api/*  ${backendUrl}/api/:splat  200`);
 } else {
-  console.warn('BACKEND_URL is not set; generated Netlify redirects without an /api proxy.');
+  const context = isNetlifyBuild ? 'Netlify build' : 'local build';
+  console.warn(`${context}: BACKEND_URL is not set; generated redirects without an /api proxy.`);
 }
 
 lines.push('/*  /index.html  200');
