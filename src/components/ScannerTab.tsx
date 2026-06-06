@@ -225,25 +225,51 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         };
 
         isStartingRef.current = true;
+        // Try multiple camera-acquisition strategies in order. Different phones
+        // fail differently: some reject a strict 'environment' constraint with
+        // OverconstrainedError, some need an explicit deviceId, some only work
+        // with no constraint at all. We try each until one starts.
+        const startStrategies: Array<() => Promise<void>> = [
+          // 1. Rear camera by facingMode (preferred on phones)
+          () => html5QrCode.start({ facingMode: { ideal: "environment" } }, scanConfig, handleBarcodeScanned, onScanError),
+          // 2. Rear camera by explicit deviceId (permission is now granted, so labels are readable)
+          async () => {
+            const devices = await Html5Qrcode.getCameras().catch(() => []);
+            if (devices.length > 0) {
+              setCameras(devices);
+              const rear = [...devices].sort((a, b) => cameraLabelScore(b.label || '') - cameraLabelScore(a.label || ''))[0];
+              if (rear?.id) {
+                return html5QrCode.start(rear.id, scanConfig, handleBarcodeScanned, onScanError);
+              }
+            }
+            throw new Error('No camera device id available');
+          },
+          // 3. No constraint at all — let the browser pick whatever camera works
+          () => html5QrCode.start({ facingMode: "user" }, scanConfig, handleBarcodeScanned, onScanError),
+        ];
+
+        let started = false;
+        let lastError: any = null;
         try {
-          await html5QrCode.start(
-            { facingMode: { ideal: "environment" } },
-            scanConfig,
-            handleBarcodeScanned,
-            onScanError
-          );
-        } catch (startErr) {
-          console.warn("Rear camera failed, trying any available camera:", startErr);
-          if (isMountedRef.current) {
-            await html5QrCode.start(
-              { facingMode: "user" },
-              scanConfig,
-              handleBarcodeScanned,
-              onScanError
-            );
+          for (const strategy of startStrategies) {
+            if (!isMountedRef.current) break;
+            try {
+              await strategy();
+              started = true;
+              break;
+            } catch (stratErr) {
+              lastError = stratErr;
+              console.warn('Camera start strategy failed, trying next:', stratErr?.name || stratErr, stratErr?.message || '');
+              // Ensure the failed instance is fully stopped before retrying
+              try { if (html5QrCode.isScanning) await html5QrCode.stop(); } catch {}
+            }
           }
         } finally {
           isStartingRef.current = false;
+        }
+
+        if (!started) {
+          throw lastError || new Error('All camera start strategies failed');
         }
 
         if (!isMountedRef.current) {
@@ -270,15 +296,21 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
       } catch (err: any) {
         isStartingRef.current = false;
         if (!isMountedRef.current) return;
+        const errName = err?.name || '';
         const errStr = err?.toString?.() || '';
-        
-        if (err?.name === 'NotAllowedError' || errStr.includes('NotAllowedError')) {
+        console.error('Camera failed to start. Error:', errName, err?.message || errStr, err);
+
+        if (errName === 'NotAllowedError' || errStr.includes('NotAllowedError') || errName === 'SecurityError') {
            setManualError("لم يتم السماح بالوصول للكاميرا. يرجى إعطاء الصلاحية من متصفحك أو الإدخال يدوياً هنا، (قد تحتاج لفتح التطبيق في تبويب جديد).");
            setActiveMode('manual');
+        } else if (errName === 'NotReadableError' || errStr.includes('NotReadableError')) {
+           setCameraError("الكاميرا قيد الاستخدام من تطبيق آخر. أغلق أي تطبيق يستخدم الكاميرا (مثل تطبيق الكاميرا أو تطبيق مكالمات) ثم أعد المحاولة.");
+        } else if (errName === 'NotFoundError' || errName === 'OverconstrainedError' || errStr.includes('OverconstrainedError')) {
+           setCameraError("لم يتم العثور على كاميرا مناسبة على هذا الجهاز. استخدم الإدخال اليدوي بالأسفل.");
         } else {
-           setCameraError("تـعذر تشغيل الكاميرا. يرجى التأكد من إعطاء الصلاحية أو استخدم الإدخال اليدوي المميز بالأسفل.");
+           setCameraError(`تعذر تشغيل الكاميرا (${errName || 'خطأ غير معروف'}). يرجى التأكد من إعطاء الصلاحية أو استخدم الإدخال اليدوي بالأسفل.`);
         }
-        
+
         setIsCameraActive(false);
       }
     }, 200);

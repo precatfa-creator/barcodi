@@ -1,4 +1,4 @@
-const CACHE_NAME = 'scanner-store-v2';
+const CACHE_NAME = 'scanner-store-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -14,7 +14,6 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[Service Worker] Pre-caching critical assets');
-      // Use helper to add individual files gracefully to prevent complete failure if any one file fails
       return Promise.allSettled(
         ASSETS_TO_CACHE.map((asset) => {
           return cache.add(asset).catch((err) => {
@@ -42,50 +41,59 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event - Handle requests offline & execute Stale-while-Revalidate strategy
+// Fetch Event
 self.addEventListener('fetch', (event) => {
   // Only intercept GET requests
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  // Exclude development tool sockets / Vite client things
+  // Never cache API calls, server-sent events, or dev tooling
   if (url.pathname.startsWith('/api/') || url.pathname.includes('/@vite/') || url.pathname.includes('/@fs/') || url.pathname.includes('socket')) {
     return;
   }
 
-  // Handle requests for same-origin resources
-  if (url.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          // Serve from cache immediately, and fetch updated asset in background
-          fetch(event.request)
-            .then((networkResponse) => {
-              if (networkResponse && networkResponse.status === 200) {
-                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-              }
-            })
-            .catch(() => { /* Ignore background sync failure while offline */ });
-          return cachedResponse;
-        }
+  if (url.origin !== self.location.origin) return;
 
-        // Fetch from network if not cached
-        return fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              const responseToCache = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
-            }
-            return networkResponse;
-          })
-          .catch(() => {
-            // Offline fallback for index pages / SPA routes
-            if (event.request.headers.get('accept')?.includes('text/html')) {
-              return caches.match('/index.html');
-            }
-          });
-      })
+  // NETWORK-FIRST for app code (HTML + JS + CSS). This guarantees users always
+  // get the freshly deployed version instead of being stuck on stale cached
+  // JavaScript after a deploy. Falls back to cache only when offline.
+  const accept = event.request.headers.get('accept') || '';
+  const isHtml = accept.includes('text/html');
+  const isAppCode = isHtml || /\.(js|mjs|css)$/i.test(url.pathname);
+
+  if (isAppCode) {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          // Offline: serve cached version, falling back to index.html for SPA routes
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          if (isHtml) return caches.match('/index.html');
+          return new Response('', { status: 504, statusText: 'Offline' });
+        })
     );
+    return;
   }
+
+  // CACHE-FIRST for static assets (icons, images, fonts) — these are immutable.
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) return cachedResponse;
+      return fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return networkResponse;
+      });
+    })
+  );
 });
