@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef, useCallback, FormEvent, type MouseEvent, type TouchEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, FormEvent, type MouseEvent, type MutableRefObject, type TouchEvent } from 'react';
 import Webcam from 'react-webcam';
-import { BarcodeDetector } from 'barcode-detector';
+import { BarcodeDetector } from 'barcode-detector/ponyfill';
 import { Camera, Barcode, AlertTriangle, CornerDownLeft, Sparkles, Zap, ZapOff, FlipHorizontal } from 'lucide-react';
 import { Product, AppSettings } from '../types';
 import { useAppContext } from '../AppContext';
@@ -62,14 +62,18 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [hasFlashlight, setHasFlashlight] = useState(false);
+  const [flashlightSupportKnown, setFlashlightSupportKnown] = useState(false);
   const [isFlashlightOn, setIsFlashlightOn] = useState(false);
   const [detectorReady, setDetectorReady] = useState(false);
   
   const webcamRef = useRef<Webcam>(null);
   const detectorRef = useRef<any>(null);
+  const scanCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const enhancedCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const scanningRef = useRef(false);
   const detectingRef = useRef(false);
+  const lastDetectAtRef = useRef(0);
   
   // Initialize BarcodeDetector once on mount
   useEffect(() => {
@@ -89,9 +93,9 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
 
     (async () => {
       try {
-        // Uses native BarcodeDetector if available, otherwise polyfills with ZXing WASM
+        // Force the ZXing-powered ponyfill for consistent retail barcode support across browsers.
         const detector = new (BarcodeDetector as any)({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93', 'itf', 'qr_code']
+          formats: ['retail_codes', 'industrial_codes', 'qr_code']
         });
         if (!cancelled) {
           detectorRef.current = detector;
@@ -141,7 +145,76 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     }
   }, []);
   
-  // Scan loop — detects barcodes from video frames
+  const getCanvas = (ref: MutableRefObject<HTMLCanvasElement | null>) => {
+    if (!ref.current) {
+      ref.current = document.createElement('canvas');
+    }
+    return ref.current;
+  };
+
+  const buildScanFrame = (video: HTMLVideoElement, enhance = false) => {
+    const videoWidth = video.videoWidth || video.clientWidth;
+    const videoHeight = video.videoHeight || video.clientHeight;
+    if (!videoWidth || !videoHeight) return null;
+
+    const sourceWidth = videoWidth * 0.92;
+    const sourceHeight = videoHeight * 0.46;
+    const sourceX = (videoWidth - sourceWidth) / 2;
+    const sourceY = (videoHeight - sourceHeight) / 2;
+    const targetWidth = Math.min(1400, Math.max(900, Math.round(sourceWidth)));
+    const targetHeight = Math.min(700, Math.max(420, Math.round(sourceHeight)));
+    const canvas = getCanvas(enhance ? enhancedCanvasRef : scanCanvasRef);
+
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
+
+    if (enhance) {
+      const image = ctx.getImageData(0, 0, targetWidth, targetHeight);
+      const data = image.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        const highContrast = Math.max(0, Math.min(255, (gray - 118) * 1.65 + 128));
+        data[i] = highContrast;
+        data[i + 1] = highContrast;
+        data[i + 2] = highContrast;
+      }
+      ctx.putImageData(image, 0, 0);
+    }
+
+    return canvas;
+  };
+
+  const detectBestBarcode = async (video: HTMLVideoElement) => {
+    const detector = detectorRef.current;
+    if (!detector) return '';
+
+    const scanFrame = buildScanFrame(video, false);
+    if (scanFrame) {
+      const barcodes = await detector.detect(scanFrame);
+      if (barcodes.length > 0) return String(barcodes[0].rawValue || '').trim();
+    }
+
+    const enhancedFrame = buildScanFrame(video, true);
+    if (enhancedFrame) {
+      const barcodes = await detector.detect(enhancedFrame);
+      if (barcodes.length > 0) return String(barcodes[0].rawValue || '').trim();
+    }
+
+    const barcodes = await detector.detect(video);
+    if (barcodes.length > 0) return String(barcodes[0].rawValue || '').trim();
+
+    return '';
+  };
+
+  // Scan loop — detects barcodes from optimized video frames.
   const scanLoop = useCallback(async () => {
     if (!scanningRef.current || !webcamRef.current?.video || !detectorRef.current || detectingRef.current) {
       return;
@@ -156,11 +229,18 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
       return;
     }
     
+    const now = performance.now();
+    if (now - lastDetectAtRef.current < 70) {
+      rafRef.current = requestAnimationFrame(scanLoop);
+      return;
+    }
+    lastDetectAtRef.current = now;
+
     detectingRef.current = true;
     try {
-      const barcodes = await detectorRef.current.detect(video);
-      if (barcodes.length > 0 && scanningRef.current) {
-        handleBarcodeScanned(barcodes[0].rawValue);
+      const decodedText = await detectBestBarcode(video);
+      if (decodedText && scanningRef.current) {
+        handleBarcodeScanned(decodedText);
         detectingRef.current = false;
         return; // Don't schedule next frame
       }
@@ -169,13 +249,8 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     }
     detectingRef.current = false;
     
-    // Throttle to ~10 fps (every 100ms) to save CPU/battery
     if (scanningRef.current) {
-      setTimeout(() => {
-        if (scanningRef.current) {
-          rafRef.current = requestAnimationFrame(scanLoop);
-        }
-      }, 100);
+      rafRef.current = requestAnimationFrame(scanLoop);
     }
   }, [handleBarcodeScanned]);
   
@@ -189,7 +264,16 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
       const track = stream.getVideoTracks()[0];
       if (track) {
         const caps: any = track.getCapabilities?.() || {};
-        setHasFlashlight(!!caps.torch);
+        setFlashlightSupportKnown('torch' in caps);
+        setHasFlashlight(!!caps.torch || facingMode === 'environment');
+
+        track.applyConstraints({
+          advanced: [
+            { focusMode: 'continuous' } as any,
+            { exposureMode: 'continuous' } as any,
+            { whiteBalanceMode: 'continuous' } as any,
+          ],
+        }).catch(() => {});
       }
     }
     
@@ -261,9 +345,15 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
       await track.applyConstraints({
         advanced: [{ torch: nextState } as any]
       });
+      setHasFlashlight(true);
+      setFlashlightSupportKnown(true);
       setIsFlashlightOn(nextState);
     } catch (err) {
       console.error('Failed to toggle flashlight:', err);
+      setIsFlashlightOn(false);
+      setHasFlashlight(false);
+      setFlashlightSupportKnown(true);
+      setCameraError('هذا الجهاز أو المتصفح لا يسمح بتشغيل الفلاش من صفحة الويب. جرّب تحسين الإضاءة أو استخدم الإدخال اليدوي.');
     }
   };
   
@@ -321,6 +411,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     }
     setIsCameraReady(false);
     setIsFlashlightOn(false);
+    setFlashlightSupportKnown(false);
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
   };
   
@@ -345,6 +436,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
       }
       setIsCameraReady(false);
       setIsFlashlightOn(false);
+      setFlashlightSupportKnown(false);
       setCameraManuallyStopped(true);
     }
   };
@@ -354,9 +446,10 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
   
   const videoConstraints: MediaTrackConstraints = {
     facingMode: { ideal: facingMode },
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
     aspectRatio: { ideal: 16 / 9 },
+    frameRate: { ideal: 30 },
     // Continuous autofocus — critical for phone barcode scanning
     advanced: [
       { focusMode: 'continuous' } as any,
@@ -408,7 +501,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         <div className="flex flex-col gap-4 animate-fade-in shrink-0 bg-white/40 p-4 rounded-[2rem] border border-white shadow-sm" id="camera-view">
           <div className="text-center">
             <h3 className="text-[15px] font-bold text-gray-900 mb-1 tracking-tight">قارئ الهاتف الذكي</h3>
-            <p className="text-[11px] text-gray-500">موجّه الهاتف نحو باركود المنتج ليتم مسحه تلقائياً في السلة</p>
+            <p className="text-[11px] text-gray-500">ضع الباركود داخل الشريط الأوسط وقرّب الهاتف حتى تظهر الخطوط بوضوح</p>
           </div>
 
           {/* Camera Frame Viewport */}
@@ -466,11 +559,8 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
 
             {isCameraReady && (
               <>
-                {/* Modern subtle corner frames for active indicator scanning boundaries */}
-                <div className="absolute top-4 left-4 w-6 h-6 border-t-[3px] border-l-[3px] border-primary-dark rounded-tl-xl pointer-events-none" />
-                <div className="absolute top-4 right-4 w-6 h-6 border-t-[3px] border-r-[3px] border-primary-dark rounded-tr-xl pointer-events-none" />
-                <div className="absolute bottom-16 left-4 w-6 h-6 border-b-[3px] border-l-[3px] border-primary-dark rounded-bl-xl pointer-events-none" />
-                <div className="absolute bottom-16 right-4 w-6 h-6 border-b-[3px] border-r-[3px] border-primary-dark rounded-br-xl pointer-events-none" />
+                {/* Barcode reading band: matches the cropped frame sent to the detector. */}
+                <div className="absolute left-[6%] right-[6%] top-1/2 h-[46%] -translate-y-1/2 rounded-2xl border-2 border-primary-light/90 shadow-[0_0_0_999px_rgba(0,0,0,0.24)] pointer-events-none" />
                 
                 {/* Neo glowing laser scanning bar sweeping smoothly vertically across the entire viewport */}
                 <div className="absolute left-0 right-0 h-[3px] bg-emerald-400 shadow-[0_0_20px_#10b981,0_0_8px_#10b981] animate-laser pointer-events-none z-10" style={{ top: '0%' }} />
@@ -499,7 +589,13 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
                         ? 'bg-amber-500 text-white border-amber-400 font-bold scale-105 shadow-amber-500/20' 
                         : 'bg-black/60 text-white border-white/20 hover:bg-black/85 hover:scale-105'
                     }`}
-                    title={isFlashlightOn ? (isEng ? "Turn Off Flash" : "إيقاف الكشاف") : (isEng ? "Turn On Flash" : "تشغيل الكشاف")}
+                    title={
+                      isFlashlightOn
+                        ? (isEng ? "Turn Off Flash" : "إيقاف الكشاف")
+                        : flashlightSupportKnown
+                          ? (isEng ? "Turn On Flash" : "تشغيل الكشاف")
+                          : (isEng ? "Try Flash" : "تجربة تشغيل الكشاف")
+                    }
                   >
                     {isFlashlightOn ? <ZapOff className="w-4 h-4 text-white animate-pulse" /> : <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />}
                   </button>
