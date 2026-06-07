@@ -16,6 +16,13 @@ interface ScannerTabProps {
   isPaused?: boolean;
 }
 
+type ScanRegion = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 // Crisp Synthesized Store Beep Sound
 export function playBeepSound() {
   try {
@@ -74,6 +81,8 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
   const scanningRef = useRef(false);
   const detectingRef = useRef(false);
   const lastDetectAtRef = useRef(0);
+  const lastRejectedBarcodeRef = useRef('');
+  const rejectCooldownUntilRef = useRef(0);
   
   // Initialize BarcodeDetector once on mount
   useEffect(() => {
@@ -113,19 +122,22 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
   
   // Barcode scan handler
   const handleBarcodeScanned = useCallback((decodedText: string) => {
-    playBeepSound();
-    scanningRef.current = false;
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
-    
+    const clean = decodedText.trim();
+    if (!clean) return false;
+
     const settings = settingsRef.current;
     if (settings.isTestMode) {
+      playBeepSound();
+      scanningRef.current = false;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+
       const mockProduct: Product = {
         id: `mock-${Date.now()}`,
-        barcode: decodedText,
-        name: `منتج تجريبي (${decodedText.slice(-4)})`,
+        barcode: clean,
+        name: `منتج تجريبي (${clean.slice(-4)})`,
         price: Number((Math.random() * 50 + 5).toFixed(2)),
         imageEmoji: '📦',
         category: 'عام',
@@ -133,15 +145,28 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         description: 'هذا منتج وهمي تم إنشاؤه أثناء وضع الاختبار.'
       };
       onProductFoundRef.current(mockProduct);
-      return;
+      return true;
     }
     
-    const clean = decodedText.trim();
     const p = productsRef.current.find(pr => pr.barcode === clean || pr.id === clean);
     if (p) {
+      playBeepSound();
+      scanningRef.current = false;
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+
       onProductFoundRef.current(p);
+      return true;
     } else {
-      setCameraError(`عذراً، الرمز (${decodedText}) ممسوح وغير مسجل لدينا في متجر النخبة.`);
+      const now = performance.now();
+      if (lastRejectedBarcodeRef.current !== clean || now > rejectCooldownUntilRef.current) {
+        lastRejectedBarcodeRef.current = clean;
+        rejectCooldownUntilRef.current = now + 2200;
+        setCameraError(`تمت قراءة الباركود (${clean}) لكنه غير موجود في منتجات هذا المتجر.`);
+      }
+      return false;
     }
   }, []);
   
@@ -152,15 +177,15 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     return ref.current;
   };
 
-  const buildScanFrame = (video: HTMLVideoElement, enhance = false) => {
+  const buildScanFrame = (video: HTMLVideoElement, region: ScanRegion, enhance = false) => {
     const videoWidth = video.videoWidth || video.clientWidth;
     const videoHeight = video.videoHeight || video.clientHeight;
     if (!videoWidth || !videoHeight) return null;
 
-    const sourceWidth = videoWidth * 0.92;
-    const sourceHeight = videoHeight * 0.46;
-    const sourceX = (videoWidth - sourceWidth) / 2;
-    const sourceY = (videoHeight - sourceHeight) / 2;
+    const sourceWidth = videoWidth * region.width;
+    const sourceHeight = videoHeight * region.height;
+    const sourceX = videoWidth * region.x;
+    const sourceY = videoHeight * region.y;
     const targetWidth = Math.min(1400, Math.max(900, Math.round(sourceWidth)));
     const targetHeight = Math.min(700, Math.max(420, Math.round(sourceHeight)));
     const canvas = getCanvas(enhance ? enhancedCanvasRef : scanCanvasRef);
@@ -196,16 +221,26 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     const detector = detectorRef.current;
     if (!detector) return '';
 
-    const scanFrame = buildScanFrame(video, false);
-    if (scanFrame) {
-      const barcodes = await detector.detect(scanFrame);
-      if (barcodes.length > 0) return String(barcodes[0].rawValue || '').trim();
+    const regions: ScanRegion[] = [
+      { x: 0.04, y: 0.23, width: 0.92, height: 0.54 },
+      { x: 0.02, y: 0.12, width: 0.96, height: 0.72 },
+      { x: 0.12, y: 0.30, width: 0.76, height: 0.40 },
+    ];
+
+    for (const region of regions) {
+      const scanFrame = buildScanFrame(video, region, false);
+      if (scanFrame) {
+        const barcodes = await detector.detect(scanFrame);
+        if (barcodes.length > 0) return String(barcodes[0].rawValue || '').trim();
+      }
     }
 
-    const enhancedFrame = buildScanFrame(video, true);
-    if (enhancedFrame) {
-      const barcodes = await detector.detect(enhancedFrame);
-      if (barcodes.length > 0) return String(barcodes[0].rawValue || '').trim();
+    for (const region of regions) {
+      const enhancedFrame = buildScanFrame(video, region, true);
+      if (enhancedFrame) {
+        const barcodes = await detector.detect(enhancedFrame);
+        if (barcodes.length > 0) return String(barcodes[0].rawValue || '').trim();
+      }
     }
 
     const barcodes = await detector.detect(video);
@@ -240,9 +275,11 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     try {
       const decodedText = await detectBestBarcode(video);
       if (decodedText && scanningRef.current) {
-        handleBarcodeScanned(decodedText);
-        detectingRef.current = false;
-        return; // Don't schedule next frame
+        const accepted = handleBarcodeScanned(decodedText);
+        if (accepted) {
+          detectingRef.current = false;
+          return; // Don't schedule next frame after a successful product match.
+        }
       }
     } catch (err) {
       // Transient detection errors — ignore and continue
