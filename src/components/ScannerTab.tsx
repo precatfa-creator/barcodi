@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef, useCallback, FormEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, FormEvent, type MouseEvent, type TouchEvent } from 'react';
 import Webcam from 'react-webcam';
 import { BarcodeDetector } from 'barcode-detector';
 import { Camera, Barcode, AlertTriangle, CornerDownLeft, Sparkles, Zap, ZapOff, FlipHorizontal } from 'lucide-react';
@@ -74,6 +74,19 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
   // Initialize BarcodeDetector once on mount
   useEffect(() => {
     let cancelled = false;
+
+    if (!window.isSecureContext) {
+      setCameraError('الكاميرا تحتاج رابط آمن HTTPS. على Render استخدم رابط https، ومحلياً استخدم http://localhost وليس IP عادي.');
+      setDetectorReady(false);
+      return () => { cancelled = true; };
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('هذا المتصفح لا يدعم تشغيل الكاميرا من صفحة الويب. جرّب Chrome أو Safari حديث.');
+      setDetectorReady(false);
+      return () => { cancelled = true; };
+    }
+
     (async () => {
       try {
         // Uses native BarcodeDetector if available, otherwise polyfills with ZXing WASM
@@ -225,7 +238,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         rafRef.current = null;
       }
     };
-  }, [isPaused, isCameraReady, scanLoop]);
+  }, [isPaused, isCameraReady, detectorReady, scanLoop]);
   
   // Cleanup on unmount
   useEffect(() => {
@@ -255,7 +268,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
   };
   
   // Tap-to-focus: refocuses camera on the tapped location (essential for small barcodes)
-  const handleTapToFocus = async (e: React.MouseEvent | React.TouchEvent) => {
+  const handleTapToFocus = async (e: MouseEvent | TouchEvent) => {
     const track = (webcamRef.current?.video?.srcObject as MediaStream)?.getVideoTracks()[0];
     if (!track) return;
     
@@ -285,12 +298,12 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
       } else if (caps.focusMode?.includes('single-shot')) {
         // Fallback: trigger single-shot autofocus, then let continuous resume
         await track.applyConstraints({
-          advanced: [{ focusMode: 'single-shot' as any }]
+          advanced: [{ focusMode: 'single-shot' } as any]
         });
         // Return to continuous after brief focus
         setTimeout(() => {
           track.applyConstraints({
-            advanced: [{ focusMode: 'continuous' as any }]
+            advanced: [{ focusMode: 'continuous' } as any]
           }).catch(() => {});
         }, 1500);
       }
@@ -341,13 +354,13 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
   
   const videoConstraints: MediaTrackConstraints = {
     facingMode: { ideal: facingMode },
-    width: { ideal: 1920, min: 1280 },
-    height: { ideal: 1080, min: 720 },
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
     aspectRatio: { ideal: 16 / 9 },
     // Continuous autofocus — critical for phone barcode scanning
     advanced: [
-      { focusMode: 'continuous' as any },
-      { focusMode: 'auto' as any }, // fallback for older browsers
+      { focusMode: 'continuous' } as any,
+      { focusMode: 'auto' } as any, // fallback for older browsers
     ],
   };
   
@@ -414,6 +427,10 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
                 className="w-full h-full object-cover absolute inset-0"
                 mirrored={facingMode === 'user'}
                 screenshotFormat="image/jpeg"
+                screenshotQuality={0.92}
+                imageSmoothing
+                forceScreenshotSourceSize={false}
+                disablePictureInPicture
                 playsInline
                 autoPlay
                 muted

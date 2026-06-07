@@ -23,14 +23,9 @@ export function ProductCard({
 }: ProductCardProps) {
   const [qty, setQty] = useState(1);
 
-  // Sync state if quantity already exists in cart, default to mock 1 or existing
   useEffect(() => {
-    if (currentCartQty > 0) {
-      setQty(currentCartQty);
-    } else {
-      setQty(1);
-    }
-  }, [product, currentCartQty]);
+    setQty(1);
+  }, [product]);
 
   const handleIncrement = () => setQty(prev => Math.min(prev + 1, 99));
   const handleDecrement = () => setQty(prev => Math.max(prev - 1, 1));
@@ -112,6 +107,11 @@ export function ProductCard({
         {/* Quantity editor controller */}
         <div className="w-full border-t border-gray-200/50 mt-4 pt-4" id="qty-selector-panel">
           <span className="text-[11px] font-bold text-gray-600 block mb-2.5">حدد كمية الشراء:</span>
+          {currentCartQty > 0 && (
+            <span className="text-[10px] text-primary-dark font-black bg-primary-pale/70 border border-primary-light/30 px-2 py-1 rounded-lg inline-block mb-2">
+              موجود في السلة حالياً: {currentCartQty}
+            </span>
+          )}
           <div className="flex items-center justify-center gap-4 max-w-[160px] mx-auto bg-white/60 border border-white shadow-sm p-1 rounded-2xl">
             <button
               onClick={handleDecrement}
@@ -147,7 +147,7 @@ export function ProductCard({
         >
           <ShoppingCart className="w-4 h-4" />
           <span>
-            {currentCartQty > 0 ? 'تحديث الكمية في السلة' : 'تأكيد وإضافة للسلة'}
+            {currentCartQty > 0 ? 'إضافة الكمية للسلة' : 'تأكيد وإضافة للسلة'}
           </span>
         </button>
       </div>

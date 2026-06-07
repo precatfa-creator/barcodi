@@ -73,7 +73,11 @@ export default function App() {
       const idx = prev.findIndex((item) => item.product.id === product.id);
       if (idx > -1) {
         const updated = [...prev];
-        updated[idx] = { ...updated[idx], quantity };
+        updated[idx] = {
+          ...updated[idx],
+          product,
+          quantity: Math.min(updated[idx].quantity + quantity, 99),
+        };
         return updated;
       } else {
         return [...prev, { product, quantity }];
