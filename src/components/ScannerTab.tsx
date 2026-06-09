@@ -256,10 +256,10 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         startingRef.current = true;
 
         const scanConfig = {
-          fps: 18,
+          fps: 25,
           qrbox: (viewWidth: number, viewHeight: number) => {
-            const width = Math.floor(viewWidth * 0.92);
-            const height = Math.floor(Math.min(viewHeight * 0.52, width * 0.62));
+            const width = Math.floor(Math.min(viewWidth * 0.78, 320));
+            const height = Math.floor(Math.min(viewHeight * 0.38, width * 0.55, 160));
             return { width, height };
           },
           aspectRatio: 4 / 3,
@@ -293,9 +293,13 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
               width: { ideal: 1920 },
               height: { ideal: 1080 },
               frameRate: { ideal: 30 },
+              focusMode: { ideal: 'continuous' } as any,
             },
           },
-          { name: 'environment fallback', source: { facingMode: 'environment' } },
+          {
+            name: 'environment fallback',
+            source: { facingMode: 'environment', focusMode: { ideal: 'continuous' } as any },
+          },
           { name: 'any camera fallback', source: { facingMode: 'user' } },
         );
 
@@ -307,7 +311,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
 
           const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID, {
             formatsToSupport: barcodeFormats,
-            useBarCodeDetectorIfSupported: false,
+            useBarCodeDetectorIfSupported: true,
             verbose: false,
           });
           scannerRef.current = scanner;
@@ -493,7 +497,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         <div className="flex flex-col gap-4 animate-fade-in shrink-0 bg-white/40 p-4 rounded-[2rem] border border-white shadow-sm" id="camera-view">
           <div className="text-center">
             <h3 className="text-[15px] font-bold text-gray-900 mb-1 tracking-tight">قارئ الهاتف الذكي</h3>
-            <p className="text-[11px] text-gray-500">ضع الباركود داخل الإطار وقرّب الهاتف حتى تظهر الخطوط بوضوح</p>
+            <p className="text-[11px] text-gray-500">وجّه الباركود داخل الإطار الأخضر — قرّب الهاتف حتى يملأ الخطوط الإطار</p>
           </div>
 
           <div className="relative w-full aspect-[4/3] max-w-sm mx-auto bg-gray-950 rounded-3xl border-[6px] border-gray-900 shadow-inner overflow-hidden flex items-center justify-center">
@@ -531,7 +535,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
 
             {isCameraReady && (
               <>
-                <div className="absolute left-[6%] right-[6%] top-1/2 h-[52%] -translate-y-1/2 rounded-2xl border-2 border-primary-light/90 shadow-[0_0_0_999px_rgba(0,0,0,0.24)] pointer-events-none" />
+                <div className="absolute left-[11%] right-[11%] top-1/2 h-[38%] -translate-y-1/2 rounded-2xl border-2 border-primary-light/90 shadow-[0_0_0_999px_rgba(0,0,0,0.30)] pointer-events-none" />
                 <div className="absolute left-0 right-0 h-[3px] bg-emerald-400 shadow-[0_0_20px_#10b981,0_0_8px_#10b981] animate-laser pointer-events-none z-10" style={{ top: '0%' }} />
 
                 <button
