@@ -192,28 +192,55 @@ function Overview({ storeId }: { storeId: string | null }) {
 
     const win = window.open('', '_blank', 'width=480,height=720');
     if (!win) return;
+    const scanGlyph =
+      `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+      `<path d="M4 7V5a1 1 0 0 1 1-1h2"/><path d="M17 4h2a1 1 0 0 1 1 1v2"/>` +
+      `<path d="M20 17v2a1 1 0 0 1-1 1h-2"/><path d="M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M4 12h16"/></svg>`;
+
     win.document.write(
       `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8" />` +
-        `<title>${esc(storeSettings.name)} - QR</title>` +
-        `<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800&display=swap" rel="stylesheet" />` +
+        `<title>${esc(storeSettings.name)} - Barcodi QR</title>` +
+        `<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />` +
         `<style>` +
         `*{box-sizing:border-box}` +
-        `body{font-family:'Cairo',system-ui,sans-serif;margin:0;padding:40px 32px;text-align:center;color:#1f2937}` +
-        `.name{font-size:28px;font-weight:800;margin:0 0 4px}` +
-        `.sub{font-size:14px;color:#6b7280;margin:0 0 28px}` +
-        `.qr{display:inline-block;padding:22px;border:2px solid #e5e7eb;border-radius:24px}` +
-        `.qr svg{width:300px;height:300px;display:block}` +
-        `.hint{font-size:16px;font-weight:700;margin:28px 0 8px}` +
-        `.url{direction:ltr;font-size:12px;color:#6b7280;word-break:break-all;max-width:340px;margin:0 auto}` +
-        `.brand{margin-top:32px;font-size:12px;color:#9ca3af}` +
-        `@media print{body{padding:0;padding-top:24px}}` +
+        `html,body{margin:0}` +
+        `body{font-family:'Cairo',system-ui,sans-serif;color:#1f2937;background:#f3f4f6;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}` +
+        `.card{width:420px;max-width:100%;background:#fff;border:1px solid #e5e7eb;border-radius:28px;overflow:hidden;text-align:center;box-shadow:0 12px 44px rgba(53,133,142,.12)}` +
+        `.accent{height:8px;background:linear-gradient(90deg,#35858E,#7DA78C,#C2D099)}` +
+        `.brandrow{display:flex;align-items:center;justify-content:center;gap:10px;padding:24px 24px 4px}` +
+        `.logo{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,#35858E,#7DA78C);display:flex;align-items:center;justify-content:center}` +
+        `.bn{font-size:21px;font-weight:800;letter-spacing:.5px;color:#35858E;direction:ltr;line-height:1}` +
+        `.ba{font-size:11px;color:#6b7280;font-weight:700;margin-top:3px}` +
+        `.store{font-size:24px;font-weight:800;margin:16px 24px 2px}` +
+        `.tag{font-size:13px;color:#6b7280;margin:0 24px 20px}` +
+        `.qrwrap{display:flex;justify-content:center;margin-bottom:18px}` +
+        `.qr{padding:18px;border-radius:20px;background:#fff;border:2px solid #E6EEC9}` +
+        `.qr svg{width:248px;height:248px;display:block}` +
+        `.steps{display:flex;justify-content:center;gap:8px;margin:0 18px 18px;flex-wrap:wrap}` +
+        `.step{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#374151;background:#f3f4f6;border-radius:999px;padding:6px 12px}` +
+        `.num{width:18px;height:18px;border-radius:50%;background:#35858E;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center}` +
+        `.url{direction:ltr;font-size:11px;color:#6b7280;background:#f9fafb;border:1px dashed #d1d5db;border-radius:10px;padding:8px 12px;margin:0 24px;word-break:break-all}` +
+        `.foot{font-size:11px;color:#9ca3af;padding:18px 24px 24px}` +
+        `.foot b{color:#35858E}` +
+        `@media print{body{background:#fff;padding:0;padding-top:24px;min-height:auto;display:block}.card{box-shadow:none;margin:0 auto}}` +
         `</style></head><body>` +
-        `<p class="name">${esc(storeSettings.name)}</p>` +
-        `<p class="sub">قارئ الأسعار الذكي</p>` +
-        `<div class="qr">${svgMarkup}</div>` +
-        `<p class="hint">امسح الرمز للدخول إلى المتجر وقراءة الأسعار</p>` +
-        `<p class="url">${esc(storeUrl)}</p>` +
-        `<p class="brand">مدعوم بواسطة باركودي</p>` +
+        `<div class="card">` +
+        `<div class="accent"></div>` +
+        `<div class="brandrow">` +
+        `<div class="logo">${scanGlyph}</div>` +
+        `<div><div class="bn">Barcodi</div><div class="ba">باركودي · قارئ الأسعار الذكي</div></div>` +
+        `</div>` +
+        `<div class="store">${esc(storeSettings.name)}</div>` +
+        `<div class="tag">امسح الكود لتصفّح المتجر ومعرفة الأسعار فوراً</div>` +
+        `<div class="qrwrap"><div class="qr">${svgMarkup}</div></div>` +
+        `<div class="steps">` +
+        `<div class="step"><span class="num">١</span>افتح الكاميرا</div>` +
+        `<div class="step"><span class="num">٢</span>وجّهها للكود</div>` +
+        `<div class="step"><span class="num">٣</span>تصفّح الأسعار</div>` +
+        `</div>` +
+        `<div class="url">${esc(storeUrl)}</div>` +
+        `<div class="foot">مدعوم بواسطة <b>Barcodi</b></div>` +
+        `</div>` +
         `</body></html>`
     );
     win.document.close();
