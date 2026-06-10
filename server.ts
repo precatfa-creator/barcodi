@@ -177,6 +177,7 @@ type StoreRecord = {
   storeLogo: string;
   products: ProductRecord[];
   visits?: number;
+  suspended?: boolean;
 };
 
 type ProductRecord = {
@@ -349,6 +350,7 @@ const storeHash = (store: StoreRecord) =>
         storeLogo: store.storeLogo || '',
         products: store.products || [],
         visits: store.visits || 0,
+        suspended: Boolean(store.suspended),
       })
     )
     .digest('hex');
@@ -369,6 +371,7 @@ const storeToSupabaseRow = (store: StoreRecord) => ({
   store_logo: store.storeLogo || '',
   products: store.products || [],
   visits: store.visits || 0,
+  suspended: Boolean(store.suspended),
 });
 
 const supabaseRowToStore = (row: any): StoreRecord | null => {
@@ -381,6 +384,7 @@ const supabaseRowToStore = (row: any): StoreRecord | null => {
     storeLogo: validateStoreLogo(row.store_logo) || '',
     products: normalizeProducts(row.products || []) || [],
     visits: Number.isFinite(Number(row.visits)) ? Number(row.visits) : 0,
+    suspended: Boolean(row.suspended),
   };
 };
 
@@ -389,8 +393,9 @@ const storeEventClients = new Map<string, Set<StoreEventClient>>();
 const getPublicStorePayload = (store: StoreRecord) => ({
   storeName: store.storeName,
   storeLogo: store.storeLogo,
-  products: store.products || [],
+  products: store.suspended ? [] : store.products || [],
   visits: store.visits || 0,
+  suspended: Boolean(store.suspended),
 });
 
 const writeStoreEvent = (client: StoreEventClient, event: string, data: unknown) => {
@@ -708,6 +713,9 @@ app.post('/api/admin/login', loginRateLimit, (req, res) => {
 
   const store = Object.values(db.stores).find((s: StoreRecord) => s.username === username);
   if (store?.passwordHash && verifyPassword(password, store.passwordHash)) {
+    if (store.suspended && store.id !== 'default') {
+      return res.status(403).json({ error: 'Account suspended', suspended: true });
+    }
     const role = store.id === 'default' ? 'commander' : 'store_admin';
     const token = jwt.sign({ username: store.username, storeId: store.id, role }, JWT_SECRET, { expiresIn: '12h' });
     res.json({ token, storeId: store.id });
@@ -721,6 +729,11 @@ app.get('/api/public/store/:storeId', publicApiLimiter, (req, res) => {
   const storeId = req.params.storeId;
   const store = db.stores[storeId];
   if (store) {
+    // A suspended store is closed to customers: report the status and skip the
+    // visit count entirely.
+    if (store.suspended) {
+      return res.json({ storeName: store.storeName, storeLogo: store.storeLogo, suspended: true });
+    }
     // Count the visit in memory and persist it on a debounced timer. A visit
     // bump does not change products/store info, so we intentionally do NOT
     // broadcast — that would re-push the full catalog to every connected client.
@@ -729,7 +742,8 @@ app.get('/api/public/store/:storeId', publicApiLimiter, (req, res) => {
     scheduleVisitFlush();
     res.json({
       storeName: store.storeName,
-      storeLogo: store.storeLogo
+      storeLogo: store.storeLogo,
+      suspended: false
     });
   } else {
     res.status(404).json({ error: 'Store not found' });
@@ -780,7 +794,7 @@ app.get('/api/public/products/:storeId', publicApiLimiter, (req, res) => {
   const storeId = req.params.storeId;
   const store = db.stores[storeId];
   if (store) {
-    res.json(store.products);
+    res.json(store.suspended ? [] : store.products);
   } else {
     res.status(404).json({ error: 'Store not found' });
   }
@@ -807,10 +821,31 @@ app.get('/api/admin/all-stores', authenticateToken, requireCommander, (req, res)
     storeName: s.storeName,
     storeLogo: s.storeLogo,
     productsCount: s.products?.length || 0,
-    visits: s.visits || 0
+    visits: s.visits || 0,
+    suspended: Boolean(s.suspended)
   }));
 
   res.json(storesList);
+});
+
+// API: Suspend / resume a store (Super Admin only)
+app.post('/api/admin/stores/:id/suspend', authenticateToken, requireCommander, async (req, res) => {
+  const user = (req as any).user;
+  const storeId = req.params.id;
+  if (storeId === user.storeId || storeId === 'default') {
+    return res.status(400).json({ error: 'Cannot suspend this account' });
+  }
+
+  const store = db.stores[storeId];
+  if (!store) return res.status(404).json({ error: 'Store not found' });
+
+  store.suspended = Boolean(req.body?.suspended);
+  saveDbIfChanged();
+  await saveStoreToDatabase(storeId);
+  // Push the new status so any customers currently in the store react live.
+  broadcastStoreUpdate(storeId);
+
+  res.json({ success: true, storeId, suspended: store.suspended });
 });
 
 // API: Delete a store (Super Admin only)

@@ -9,6 +9,7 @@ interface AppContextProps {
   loadStoreData: (storeId: string) => Promise<void>;
   subscribeToStoreData: (storeId: string) => () => void;
   loading: boolean;
+  storeSuspended: boolean;
 }
 
 const defaultStoreSettings: StoreSettings = {
@@ -22,6 +23,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [products, setProductsState] = useState<Product[]>([]);
   const [storeSettings, setStoreSettingsState] = useState<StoreSettings>(defaultStoreSettings);
   const [loading, setLoading] = useState(false);
+  const [storeSuspended, setStoreSuspended] = useState(false);
   
   const loadStoreData = useCallback(async (storeId: string) => {
     setLoading(true);
@@ -35,6 +37,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       
       if (storeRes.ok) {
         const storeData = await storeRes.json();
+        setStoreSuspended(Boolean(storeData.suspended));
         if (storeData.storeName) {
            setStoreSettingsState(prev => ({
              ...prev,
@@ -63,6 +66,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const applyStorePayload = useCallback((storeData: any) => {
+    setStoreSuspended(Boolean(storeData.suspended));
     if (storeData.storeName) {
       setStoreSettingsState(prev => ({
         ...prev,
@@ -132,7 +136,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, subscribeToStoreData, loading }}>
+    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, subscribeToStoreData, loading, storeSuspended }}>
       {children}
     </AppContext.Provider>
   );

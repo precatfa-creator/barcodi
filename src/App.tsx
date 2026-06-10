@@ -17,7 +17,7 @@ import { useAppContext } from './AppContext';
 
 export default function App() {
   const { storeId } = useParams<{ storeId: string }>();
-  const { storeSettings, products, loadStoreData, subscribeToStoreData, loading } = useAppContext();
+  const { storeSettings, products, loadStoreData, subscribeToStoreData, loading, storeSuspended } = useAppContext();
   
   useEffect(() => {
     if (storeId) {
@@ -124,6 +124,22 @@ export default function App() {
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-primary-main" dir={isEng ? 'ltr' : 'rtl'}>
          <Loader2 className="w-10 h-10 animate-spin mb-4" />
          <p className="font-bold text-gray-700">{isEng ? 'Loading store...' : 'جاري تحميل المتجر...'}</p>
+      </div>
+    );
+  }
+
+  if (storeSuspended) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-8 text-center" dir={isEng ? 'ltr' : 'rtl'}>
+        <div className="w-20 h-20 rounded-3xl bg-amber-50 text-amber-500 flex items-center justify-center mb-6 shadow-sm">
+          <Store className="w-10 h-10" />
+        </div>
+        <h1 className="text-2xl font-black text-gray-900 mb-2">{isEng ? 'Store temporarily unavailable' : 'المتجر غير متاح حالياً'}</h1>
+        <p className="text-sm text-gray-500 font-medium max-w-sm leading-relaxed">
+          {isEng
+            ? 'This store is paused at the moment. Please check back later or contact the store.'
+            : 'تم إيقاف هذا المتجر مؤقتاً. يرجى المحاولة لاحقاً أو التواصل مع إدارة المتجر.'}
+        </p>
       </div>
     );
   }
