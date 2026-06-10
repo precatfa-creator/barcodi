@@ -288,17 +288,19 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         strategies.push(
           {
             name: 'rear facing mode',
+            // focusMode is widely supported on mobile but not yet in the standard
+            // MediaTrackConstraints type, so the whole literal is asserted.
             source: {
               facingMode: { ideal: preferredFacingMode },
               width: { ideal: 1920 },
               height: { ideal: 1080 },
               frameRate: { ideal: 30 },
-              focusMode: { ideal: 'continuous' } as any,
-            },
+              focusMode: { ideal: 'continuous' },
+            } as MediaTrackConstraints,
           },
           {
             name: 'environment fallback',
-            source: { facingMode: 'environment', focusMode: { ideal: 'continuous' } as any },
+            source: { facingMode: 'environment', focusMode: { ideal: 'continuous' } } as MediaTrackConstraints,
           },
           { name: 'any camera fallback', source: { facingMode: 'user' } },
         );

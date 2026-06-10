@@ -548,6 +548,25 @@ function saveDbIfChanged() {
   fs.writeFileSync(DB_PATH, next);
 }
 
+// The public store endpoint is hit on every shopper page load and only bumps a
+// visit counter. Persisting that synchronously on each hit thrashes disk I/O,
+// so batch the writes and flush at most once per window.
+const dirtyVisitStoreIds = new Set<string>();
+let visitFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+const scheduleVisitFlush = () => {
+  if (visitFlushTimer) return;
+  visitFlushTimer = setTimeout(() => {
+    visitFlushTimer = null;
+    if (dirtyVisitStoreIds.size === 0) return;
+    const storeIds = [...dirtyVisitStoreIds];
+    dirtyVisitStoreIds.clear();
+    saveDbIfChanged();
+    for (const storeId of storeIds) saveStoreToDatabase(storeId);
+  }, 10_000);
+  visitFlushTimer.unref?.();
+};
+
 
 // Middleware
 const authenticateToken = (req: any, res: any, next: any) => {
@@ -562,25 +581,51 @@ const authenticateToken = (req: any, res: any, next: any) => {
   });
 };
 
-const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+// Generic in-memory rate limiter. Periodically evicts expired buckets so the
+// map cannot grow unbounded across many client IPs.
+const createRateLimiter = ({ windowMs, max, message }: { windowMs: number; max: number; message: string }) => {
+  const hits = new Map<string, { count: number; resetAt: number }>();
 
-const loginRateLimit = (req: any, res: any, next: any) => {
-  const key = req.ip || req.socket?.remoteAddress || 'unknown';
-  const now = Date.now();
-  const current = loginAttempts.get(key);
+  const cleanup = setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of hits) {
+      if (value.resetAt < now) hits.delete(key);
+    }
+  }, windowMs);
+  cleanup.unref?.();
 
-  if (!current || current.resetAt < now) {
-    loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 });
+  return (req: any, res: any, next: any) => {
+    const key = req.ip || req.socket?.remoteAddress || 'unknown';
+    const now = Date.now();
+    const current = hits.get(key);
+
+    if (!current || current.resetAt < now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (current.count >= max) {
+      return res.status(429).json({ error: message });
+    }
+
+    current.count += 1;
     return next();
-  }
-
-  if (current.count >= 20) {
-    return res.status(429).json({ error: 'Too many login attempts. Try again later.' });
-  }
-
-  current.count += 1;
-  return next();
+  };
 };
+
+const loginRateLimit = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Too many login attempts. Try again later.',
+});
+
+// Generous limit for public reads: a normal page load is ~2 requests, so this
+// absorbs reloads while blocking abusive loops that thrash disk I/O.
+const publicApiLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: 'Too many requests. Please slow down.',
+});
 
 // API: Register Store
 app.post('/api/admin/register', authenticateToken, requireCommander, (req, res) => {
@@ -633,14 +678,16 @@ app.post('/api/admin/login', loginRateLimit, (req, res) => {
 });
 
 // API: Get Store Info (Public)
-app.get('/api/public/store/:storeId', (req, res) => {
+app.get('/api/public/store/:storeId', publicApiLimiter, (req, res) => {
   const storeId = req.params.storeId;
   const store = db.stores[storeId];
   if (store) {
+    // Count the visit in memory and persist it on a debounced timer. A visit
+    // bump does not change products/store info, so we intentionally do NOT
+    // broadcast — that would re-push the full catalog to every connected client.
     store.visits = (store.visits || 0) + 1;
-    saveDbIfChanged();
-    saveStoreToDatabase(storeId);
-    broadcastStoreUpdate(storeId);
+    dirtyVisitStoreIds.add(storeId);
+    scheduleVisitFlush();
     res.json({
       storeName: store.storeName,
       storeLogo: store.storeLogo
@@ -690,7 +737,7 @@ app.get('/api/public/store/:storeId/events', (req, res) => {
 });
 
 // API: Get Products (Public)
-app.get('/api/public/products/:storeId', (req, res) => {
+app.get('/api/public/products/:storeId', publicApiLimiter, (req, res) => {
   const storeId = req.params.storeId;
   const store = db.stores[storeId];
   if (store) {

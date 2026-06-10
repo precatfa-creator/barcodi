@@ -7,3 +7,6 @@ coverage/
 .env*
 !.env.example
 .npm-cache/
+
+# Runtime database (contains password hashes — never commit)
+data/db.json
