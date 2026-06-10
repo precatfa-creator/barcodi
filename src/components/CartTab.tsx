@@ -3,12 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, lazy, Suspense } from 'react';
 import { ShoppingCart, Trash2, Plus, Minus, Info, ClipboardCheck, ArrowRight, Sparkles, AlertTriangle, X, Download, Loader2, CheckCircle2, Barcode as BarcodeIcon } from 'lucide-react';
 import { CartItem } from '../types';
-import { toPng } from 'html-to-image';
-import { jsPDF } from 'jspdf';
-import ReactBarcode from 'react-barcode';
+
+// react-barcode is only rendered inside the "approve invoice" modal, so load it
+// lazily instead of shipping it in the initial bundle. jspdf and html-to-image
+// are imported dynamically inside generatePDF (see below) for the same reason.
+const ReactBarcode = lazy(() => import('react-barcode'));
 
 interface CartTabProps {
   cart: CartItem[];
@@ -43,6 +45,12 @@ export function CartTab({
     if (!printInvoiceRef.current) return;
     setIsGeneratingPdf(true);
     try {
+      // Load the heavy PDF/image libraries only when the user actually exports.
+      const [{ toPng }, { jsPDF }] = await Promise.all([
+        import('html-to-image'),
+        import('jspdf'),
+      ]);
+
       const imgData = await toPng(printInvoiceRef.current, {
         pixelRatio: 2,
         backgroundColor: '#ffffff',
@@ -373,8 +381,10 @@ export function CartTab({
               يرجى مسح الباركود التالي من خلال جهاز الكاشير (POS) لسحب الأصناف وإتمام الدفع.
             </p>
             
-            <div className="bg-white p-4 rounded-xl border-2 border-gray-100 flex justify-center items-center mb-6 shadow-inner pointer-events-none" dir="ltr">
-              <ReactBarcode value={invoiceId} width={2} height={80} displayValue={true} background="#ffffff" lineColor="#1f2937" margin={0} />
+            <div className="bg-white p-4 rounded-xl border-2 border-gray-100 flex justify-center items-center mb-6 shadow-inner pointer-events-none min-h-[112px]" dir="ltr">
+              <Suspense fallback={<Loader2 className="w-6 h-6 animate-spin text-gray-300" />}>
+                <ReactBarcode value={invoiceId} width={2} height={80} displayValue={true} background="#ffffff" lineColor="#1f2937" margin={0} />
+              </Suspense>
             </div>
 
             <button
