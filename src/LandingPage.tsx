@@ -1,28 +1,86 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Store, 
-  QrCode, 
-  UploadCloud, 
-  Smartphone, 
-  MessageCircle, 
-  Check, 
-  HelpCircle, 
-  Sparkles, 
-  ShoppingCart, 
-  ArrowLeft, 
-  DollarSign, 
-  Layers, 
-  ShieldCheck, 
-  Zap, 
+import {
+  Store,
+  QrCode,
+  UploadCloud,
+  Smartphone,
+  MessageCircle,
+  Check,
+  HelpCircle,
+  Sparkles,
+  ShoppingCart,
+  ArrowLeft,
+  DollarSign,
+  Layers,
+  ShieldCheck,
+  Zap,
   Flame,
   XCircle,
   TrendingUp,
-  Award
+  Award,
+  Camera,
+  Infinity as InfinityIcon,
+  Timer
 } from 'lucide-react';
+
+// Reveal elements with the `reveal` class as they scroll into view. Pure
+// IntersectionObserver — no animation library, keeps the public bundle light.
+function useScrollReveal() {
+  useEffect(() => {
+    const elements = Array.from(document.querySelectorAll<HTMLElement>('.reveal'));
+    if (elements.length === 0) return;
+
+    if (!('IntersectionObserver' in window)) {
+      elements.forEach((el) => el.classList.add('is-visible'));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    elements.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+}
 
 export default function LandingPage() {
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
+  useScrollReveal();
+
+  const heroStats = [
+    { icon: DollarSign, value: '0$', label: 'تكلفة أجهزة قارئ' },
+    { icon: Timer, value: 'ثانية', label: 'لظهور السعر' },
+    { icon: InfinityIcon, value: 'لا محدود', label: 'عدد الأصناف' },
+    { icon: Smartphone, value: 'بدون تحميل', label: 'يعمل من الكاميرا' },
+  ];
+
+  const howItWorks = [
+    {
+      icon: QrCode,
+      title: 'امسح رمز المتجر',
+      desc: 'يوجّه الزبون كاميرا هاتفه إلى كود QR المطبوع على الرفوف أو السلال، فيُفتح متجرك فوراً بدون تحميل أي تطبيق.',
+    },
+    {
+      icon: Camera,
+      title: 'وجّه الكاميرا للمنتج',
+      desc: 'يصوّب الكاميرا نحو باركود أي صنف، ليقرأه النظام في لحظة ويعرض الاسم والسعر والمواصفات بدقة.',
+    },
+    {
+      icon: ShoppingCart,
+      title: 'أضف للسلة واحسب',
+      desc: 'يضيف الأصناف لسلة ذكية تحسب الإجمالي التقديري فوراً، فيتسوّق بثقة ويصل للكاشير بلا مفاجآت.',
+    },
+  ];
 
   const pricePlans = [
     {
@@ -150,8 +208,8 @@ export default function LandingPage() {
           <span className="text-[11px] font-black tracking-widest uppercase">الجيل الجديد من حلول البيع بالتجزئة والخدمة الذاتية</span>
         </div>
 
-        <h2 className="text-4xl md:text-6xl font-black text-gray-950 mb-6 leading-[1.2] max-w-4xl mx-auto">
-          حوّل جوال عميلك إلى <span className="bg-gradient-to-r from-primary-dark to-primary-main bg-clip-text text-transparent">جهاز قارئ أسعار</span> متطور وبأقل تكلفة!
+        <h2 className="text-4xl md:text-6xl font-black text-gray-950 mb-6 leading-[1.2] max-w-4xl mx-auto animate-fade-in-up">
+          حوّل جوال عميلك إلى <span className="animate-gradient bg-gradient-to-r from-primary-dark via-primary-main to-primary-dark bg-clip-text text-transparent">جهاز قارئ أسعار</span> متطور وبأقل تكلفة!
         </h2>
         
         <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto mb-10 leading-relaxed font-medium">
@@ -177,8 +235,24 @@ export default function LandingPage() {
           </a>
         </div>
 
+        {/* Hero trust / stats strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 max-w-4xl mx-auto mb-16">
+          {heroStats.map((stat, i) => (
+            <div
+              key={i}
+              className="reveal bg-white/60 backdrop-blur-md border border-white/70 rounded-2xl px-4 py-5 flex flex-col items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
+            >
+              <div className="w-10 h-10 rounded-xl bg-primary-pale/70 text-primary-dark flex items-center justify-center mb-1">
+                <stat.icon className="w-5 h-5" />
+              </div>
+              <span className="text-xl md:text-2xl font-black text-gray-900 leading-none">{stat.value}</span>
+              <span className="text-[11px] text-gray-500 font-bold text-center leading-tight">{stat.label}</span>
+            </div>
+          ))}
+        </div>
+
         {/* Floating Glassmorphic App Feature Mockup Screen */}
-        <div className="relative mx-auto max-w-4xl rounded-3xl p-3 bg-gradient-to-tr from-white/30 to-white/60 backdrop-blur-xl border border-white/80 shadow-[0_50px_100px_rgba(35,133,142,0.1)] mb-20 overflow-hidden">
+        <div className="reveal relative mx-auto max-w-4xl rounded-3xl p-3 bg-gradient-to-tr from-white/30 to-white/60 backdrop-blur-xl border border-white/80 shadow-[0_50px_100px_rgba(35,133,142,0.1)] mb-20 overflow-hidden">
           <div className="absolute -top-12 -left-12 w-32 h-32 rounded-full bg-primary-light/50 blur-2xl pointer-events-none" />
           <div className="absolute -bottom-12 -right-12 w-32 h-32 rounded-full bg-emerald-200/50 blur-2xl pointer-events-none" />
           
@@ -257,6 +331,43 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* How It Works - 3 simple steps */}
+      <section className="max-w-6xl mx-auto px-6 py-20 relative z-10">
+        <div className="text-center max-w-3xl mx-auto mb-16">
+          <span className="inline-flex items-center justify-center px-4 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black tracking-widest uppercase shadow-xl shadow-gray-900/10 border border-gray-800">ثلاث خطوات بسيطة</span>
+          <h3 className="text-3xl md:text-4xl font-black text-gray-950 mt-4 mb-6 leading-tight">
+            كيف يعمل باركودي؟ بسيط كلمح البصر
+          </h3>
+          <p className="text-md text-gray-600 font-medium">
+            لا أجهزة، لا تطبيقات، ولا تعقيد. ثلاث خطوات فقط تفصل عميلك عن معرفة السعر وإتمام جولته بثقة.
+          </p>
+        </div>
+
+        <div className="relative grid md:grid-cols-3 gap-8">
+          {/* Connecting line (desktop) */}
+          <div className="hidden md:block absolute top-12 right-[16%] left-[16%] h-0.5 bg-gradient-to-l from-primary-light/0 via-primary-light to-primary-light/0 -z-0" />
+
+          {howItWorks.map((step, i) => (
+            <div
+              key={i}
+              className="reveal relative z-10 bg-white/70 backdrop-blur-md border border-white/70 rounded-3xl p-8 text-center shadow-sm hover:shadow-lg hover:-translate-y-1.5 transition-all duration-300"
+            >
+              <div className="relative mx-auto mb-6 w-24 h-24">
+                <div className="absolute inset-0 rounded-full bg-primary-pale/50 blur-xl" />
+                <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-tr from-primary-dark to-primary-main text-white flex items-center justify-center shadow-lg">
+                  <step.icon className="w-10 h-10" />
+                </div>
+                <span className="absolute -top-2 -left-2 w-8 h-8 rounded-full bg-white text-primary-dark font-black text-sm flex items-center justify-center shadow-md border border-primary-light/40">
+                  {i + 1}
+                </span>
+              </div>
+              <h4 className="text-xl font-black text-gray-950 mb-3">{step.title}</h4>
+              <p className="text-sm text-gray-500 font-medium leading-relaxed">{step.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Extreme Core Benefits Block - Requested Details */}
       <section className="bg-white/40 backdrop-blur-xl border-y border-white/60 py-24 relative z-10">
         <div className="max-w-6xl mx-auto px-6">
@@ -273,7 +384,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             
             {/* Unique Benefit 1: Massive Budget Cost Savings */}
-            <div className="bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
+            <div className="reveal bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
               <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <DollarSign className="w-6 h-6" />
               </div>
@@ -284,7 +395,7 @@ export default function LandingPage() {
             </div>
 
             {/* Unique Benefit 2: Solving Stray Products Shelf Error */}
-            <div className="bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
+            <div className="reveal bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
               <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <XCircle className="w-6 h-6" />
               </div>
@@ -295,7 +406,7 @@ export default function LandingPage() {
             </div>
 
             {/* Unique Benefit 3: Customer Satisfaction & Ease of Shoppping */}
-            <div className="bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
+            <div className="reveal bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <Award className="w-6 h-6" />
               </div>
@@ -306,7 +417,7 @@ export default function LandingPage() {
             </div>
 
             {/* Unique Benefit 4: Fast Cloud Excel Spreadsheet Integration */}
-            <div className="bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
+            <div className="reveal bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
               <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                 <UploadCloud className="w-6 h-6" />
               </div>
@@ -413,7 +524,7 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-3 gap-8 items-stretch">
             {pricePlans.map((plan, idx) => (
-              <div 
+              <div
                 key={idx}
                 className={`relative bg-white/70 backdrop-blur-md rounded-[2rem] border p-8 flex flex-col justify-between transition-all duration-300 shadow-sm ${
                    plan.popular 
