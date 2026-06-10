@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { Product, StoreSettings } from './types';
 
 interface AppContextProps {
@@ -23,7 +23,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [storeSettings, setStoreSettingsState] = useState<StoreSettings>(defaultStoreSettings);
   const [loading, setLoading] = useState(false);
   
-  const loadStoreData = async (storeId: string) => {
+  const loadStoreData = useCallback(async (storeId: string) => {
     setLoading(true);
 
     try {
@@ -60,9 +60,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const applyStorePayload = (storeData: any) => {
+  const applyStorePayload = useCallback((storeData: any) => {
     if (storeData.storeName) {
       setStoreSettingsState(prev => ({
         ...prev,
@@ -75,9 +75,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (Array.isArray(storeData.products)) {
       setProductsState(storeData.products);
     }
-  };
+  }, []);
 
-  const subscribeToStoreData = (storeId: string) => {
+  const subscribeToStoreData = useCallback((storeId: string) => {
     if (typeof window === 'undefined' || !('EventSource' in window)) {
       return () => {};
     }
@@ -105,9 +105,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return () => events.close();
-  };
+  }, [applyStorePayload]);
 
-  const setProducts = async (newProducts: Product[]) => {
+  const setProducts = useCallback(async (newProducts: Product[]) => {
     setProductsState(newProducts);
     const token = localStorage.getItem('adminToken');
     if (token) {
@@ -117,9 +117,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
          body: JSON.stringify({ products: newProducts })
        });
     }
-  };
+  }, []);
 
-  const setStoreSettings = async (newSettings: StoreSettings) => {
+  const setStoreSettings = useCallback(async (newSettings: StoreSettings) => {
     setStoreSettingsState(newSettings);
     const token = localStorage.getItem('adminToken');
     if (token) {
@@ -129,7 +129,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
          body: JSON.stringify({ storeName: newSettings.name, storeLogo: newSettings.logoUrl })
        });
     }
-  };
+  }, []);
 
   return (
     <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, subscribeToStoreData, loading }}>
