@@ -8,6 +8,7 @@ interface AppContextProps {
   setStoreSettings: (settings: StoreSettings) => void;
   loadStoreData: (storeId: string) => Promise<void>;
   subscribeToStoreData: (storeId: string) => () => void;
+  registerVisit: (storeId: string) => void;
   loading: boolean;
   storeSuspended: boolean;
 }
@@ -62,6 +63,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       setProductsState([]);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // Count a visit at most once per device per day. The localStorage stamp is
+  // only written when the server confirms it counted, so visits to a suspended
+  // store still count once it's reactivated.
+  const registerVisit = useCallback(async (storeId: string) => {
+    try {
+      const key = `barcodi_visit_${storeId}`;
+      const today = new Date().toISOString().slice(0, 10);
+      if (localStorage.getItem(key) === today) return;
+      const res = await fetch(`/api/public/store/${storeId}/visit`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.counted) localStorage.setItem(key, today);
+    } catch {
+      // best-effort analytics; ignore failures
     }
   }, []);
 
@@ -136,7 +153,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, subscribeToStoreData, loading, storeSuspended }}>
+    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, subscribeToStoreData, registerVisit, loading, storeSuspended }}>
       {children}
     </AppContext.Provider>
   );

@@ -13,8 +13,10 @@ import {
   Users,
   ArrowUpLeft,
   Trophy,
+  DatabaseBackup,
 } from 'lucide-react';
 import ChangePasswordCard from './ChangePasswordCard';
+import { downloadXlsx } from './xlsx';
 
 interface StoreData {
   id: string;
@@ -23,12 +25,35 @@ interface StoreData {
   storeLogo?: string;
   productsCount?: number;
   visits?: number;
+  suspended?: boolean;
 }
 
 export default function CommanderOverview() {
   const navigate = useNavigate();
   const [stores, setStores] = useState<StoreData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [backingUp, setBackingUp] = useState(false);
+
+  const handleBackup = async () => {
+    setBackingUp(true);
+    try {
+      const res = await fetch('/api/admin/backup', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('adminToken')}` },
+      });
+      if (!res.ok) throw new Error('backup failed');
+      const data = await res.json();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `barcodi-backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('تعذّر إنشاء النسخة الاحتياطية. حاول مرة أخرى.');
+    } finally {
+      setBackingUp(false);
+    }
+  };
 
   useEffect(() => {
     const loadStores = async () => {
@@ -217,7 +242,7 @@ export default function CommanderOverview() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <button
           onClick={() => navigate('/admin/dashboard/subscribers')}
           className="group bg-gradient-to-bl from-primary-dark to-primary-main text-white rounded-2xl p-5 text-right shadow-sm hover:shadow-md transition-all flex items-center justify-between"
@@ -232,25 +257,41 @@ export default function CommanderOverview() {
         </button>
 
         <button
-          onClick={() => {
-            const header = ['اسم المتجر', 'اسم المستخدم', 'عدد المنتجات', 'الزيارات'];
-            const rows = stores.map((s) => [s.storeName, s.username, s.productsCount || 0, s.visits || 0]);
-            const csv = '﻿' + [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-            const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `تقرير_المتاجر_${new Date().toISOString().slice(0, 10)}.csv`;
-            link.click();
-            URL.revokeObjectURL(url);
-          }}
+          onClick={() =>
+            downloadXlsx(
+              stores.map((s) => ({
+                'اسم المتجر': s.storeName,
+                'اسم المستخدم': s.username,
+                'عدد المنتجات': s.productsCount || 0,
+                'الزيارات': s.visits || 0,
+                'الحالة': s.suspended ? 'موقوف' : 'نشط',
+              })),
+              `تقرير_المتاجر_${new Date().toISOString().slice(0, 10)}.xlsx`,
+              'المتاجر'
+            )
+          }
           className="group bg-white border border-gray-100 rounded-2xl p-5 text-right shadow-sm hover:shadow-md hover:border-gray-200 transition-all flex items-center justify-between"
         >
           <div>
             <div className="font-black text-sm text-gray-900">تصدير تقرير المتاجر</div>
-            <div className="text-[11px] text-gray-400 font-bold mt-0.5">ملف CSV بكل البيانات</div>
+            <div className="text-[11px] text-gray-400 font-bold mt-0.5">ملف Excel بكل البيانات</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center group-hover:bg-gray-200 transition-colors">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
             <FileText className="w-5 h-5" />
+          </div>
+        </button>
+
+        <button
+          onClick={handleBackup}
+          disabled={backingUp}
+          className="group bg-white border border-gray-100 rounded-2xl p-5 text-right shadow-sm hover:shadow-md hover:border-gray-200 transition-all flex items-center justify-between disabled:opacity-50"
+        >
+          <div>
+            <div className="font-black text-sm text-gray-900">نسخة احتياطية</div>
+            <div className="text-[11px] text-gray-400 font-bold mt-0.5">{backingUp ? 'جاري التحضير...' : 'تنزيل نسخة كاملة'}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+            <DatabaseBackup className="w-5 h-5" />
           </div>
         </button>
 

@@ -729,25 +729,30 @@ app.get('/api/public/store/:storeId', publicApiLimiter, (req, res) => {
   const storeId = req.params.storeId;
   const store = db.stores[storeId];
   if (store) {
-    // A suspended store is closed to customers: report the status and skip the
-    // visit count entirely.
-    if (store.suspended) {
-      return res.json({ storeName: store.storeName, storeLogo: store.storeLogo, suspended: true });
-    }
-    // Count the visit in memory and persist it on a debounced timer. A visit
-    // bump does not change products/store info, so we intentionally do NOT
-    // broadcast — that would re-push the full catalog to every connected client.
-    store.visits = (store.visits || 0) + 1;
-    dirtyVisitStoreIds.add(storeId);
-    scheduleVisitFlush();
+    // Visits are counted separately (POST /visit, deduplicated per device/day by
+    // the client) so simply loading store info doesn't inflate the counter.
     res.json({
       storeName: store.storeName,
       storeLogo: store.storeLogo,
-      suspended: false
+      suspended: Boolean(store.suspended),
     });
   } else {
     res.status(404).json({ error: 'Store not found' });
   }
+});
+
+// API: Register a visit (called once per device per day by the client)
+app.post('/api/public/store/:storeId/visit', publicApiLimiter, (req, res) => {
+  const store = db.stores[req.params.storeId];
+  if (!store) return res.status(404).json({ error: 'Store not found' });
+  if (store.suspended) return res.json({ counted: false });
+
+  // Count in memory and persist on a debounced timer (no broadcast — a visit
+  // bump shouldn't re-push the catalog to every connected client).
+  store.visits = (store.visits || 0) + 1;
+  dirtyVisitStoreIds.add(store.id);
+  scheduleVisitFlush();
+  res.json({ counted: true });
 });
 
 // API: Realtime public store updates
@@ -826,6 +831,16 @@ app.get('/api/admin/all-stores', authenticateToken, requireCommander, (req, res)
   }));
 
   res.json(storesList);
+});
+
+// API: Download a full backup (Super Admin only)
+app.get('/api/admin/backup', authenticateToken, requireCommander, (req, res) => {
+  res.setHeader('Content-Disposition', 'attachment; filename="barcodi-backup.json"');
+  res.json({
+    exportedAt: new Date().toISOString(),
+    version: 1,
+    stores: db.stores,
+  });
 });
 
 // API: Suspend / resume a store (Super Admin only)
