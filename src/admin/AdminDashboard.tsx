@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Store, UploadCloud, LogOut, QrCode, Users } from 'lucide-react';
+import { LayoutDashboard, Store, UploadCloud, LogOut, QrCode, Users, Printer } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import StoreSettingsForm from './StoreSettingsForm';
 import ProductsUpload from './ProductsUpload';
@@ -155,6 +155,45 @@ export default function AdminDashboard({ onLogout }: Props) {
 function Overview({ storeId }: { storeId: string | null }) {
   const storeUrl = storeId ? `${window.location.origin}/store/${storeId}` : '';
   const { products, storeSettings } = useAppContext();
+  const qrRef = useRef<HTMLDivElement>(null);
+
+  const handlePrintQr = () => {
+    const svg = qrRef.current?.querySelector('svg');
+    if (!svg) return;
+    const svgMarkup = new XMLSerializer().serializeToString(svg);
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+
+    const win = window.open('', '_blank', 'width=480,height=720');
+    if (!win) return;
+    win.document.write(
+      `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8" />` +
+        `<title>${esc(storeSettings.name)} - QR</title>` +
+        `<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800&display=swap" rel="stylesheet" />` +
+        `<style>` +
+        `*{box-sizing:border-box}` +
+        `body{font-family:'Cairo',system-ui,sans-serif;margin:0;padding:40px 32px;text-align:center;color:#1f2937}` +
+        `.name{font-size:28px;font-weight:800;margin:0 0 4px}` +
+        `.sub{font-size:14px;color:#6b7280;margin:0 0 28px}` +
+        `.qr{display:inline-block;padding:22px;border:2px solid #e5e7eb;border-radius:24px}` +
+        `.qr svg{width:300px;height:300px;display:block}` +
+        `.hint{font-size:16px;font-weight:700;margin:28px 0 8px}` +
+        `.url{direction:ltr;font-size:12px;color:#6b7280;word-break:break-all;max-width:340px;margin:0 auto}` +
+        `.brand{margin-top:32px;font-size:12px;color:#9ca3af}` +
+        `@media print{body{padding:0;padding-top:24px}}` +
+        `</style></head><body>` +
+        `<p class="name">${esc(storeSettings.name)}</p>` +
+        `<p class="sub">قارئ الأسعار الذكي</p>` +
+        `<div class="qr">${svgMarkup}</div>` +
+        `<p class="hint">امسح الرمز للدخول إلى المتجر وقراءة الأسعار</p>` +
+        `<p class="url">${esc(storeUrl)}</p>` +
+        `<p class="brand">مدعوم بواسطة باركودي</p>` +
+        `</body></html>`
+    );
+    win.document.close();
+    win.focus();
+    win.onload = () => win.print();
+    setTimeout(() => { try { win.print(); } catch {} }, 400);
+  };
 
   return (
     <div className="space-y-6">
@@ -186,14 +225,21 @@ function Overview({ storeId }: { storeId: string | null }) {
           <h3 className="text-xl font-bold text-gray-900 mb-2">رابط المتجر للعملاء</h3>
           <p className="text-gray-500 text-sm mb-6">دع عملاءك يمسحون هذا الرمز للدخول مباشرة إلى متجرك</p>
           
-          <div className="bg-gray-50 inline-block p-4 rounded-2xl mb-6">
+          <div ref={qrRef} className="bg-gray-50 inline-block p-4 rounded-2xl mb-6">
             <QRCodeSVG value={storeUrl} size={200} />
           </div>
 
-          <div>
-             <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="text-primary-dark font-bold hover:underline" style={{ direction: 'ltr', display: 'inline-block' }}>
-               {storeUrl}
-             </a>
+          <div className="flex flex-col items-center gap-4">
+            <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="text-primary-dark font-bold hover:underline" style={{ direction: 'ltr', display: 'inline-block' }}>
+              {storeUrl}
+            </a>
+            <button
+              onClick={handlePrintQr}
+              className="inline-flex items-center gap-2 bg-primary-dark hover:bg-primary-dark/90 text-white font-bold text-sm px-6 py-3 rounded-xl shadow-sm transition-colors active:scale-95"
+            >
+              <Printer className="w-4 h-4" />
+              <span>طباعة رمز QR</span>
+            </button>
           </div>
         </div>
       )}
