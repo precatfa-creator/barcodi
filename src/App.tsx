@@ -17,11 +17,12 @@ import { useAppContext } from './AppContext';
 
 export default function App() {
   const { storeId } = useParams<{ storeId: string }>();
-  const { storeSettings, products, loadStoreData, subscribeToStoreData, loading, storeSuspended } = useAppContext();
-  
+  const { storeSettings, products, loadStoreData, subscribeToStoreData, registerVisit, loading, storeSuspended } = useAppContext();
+
   useEffect(() => {
     if (storeId) {
       loadStoreData(storeId);
+      registerVisit(storeId);
       return subscribeToStoreData(storeId);
     }
   }, [storeId]);
