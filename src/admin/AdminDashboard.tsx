@@ -57,42 +57,49 @@ export default function AdminDashboard({ onLogout }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex" dir="rtl">
-      {/* Sidebar sidebar */}
-      <aside className="w-64 bg-white border-l border-gray-200 hidden md:flex flex-col">
-        <div className="p-6">
-          <h2 className="text-xl font-black text-primary-dark">
-            {isCommander ? 'لوحة التحكم' : 'إدارة متجرك'}
-          </h2>
+    <div className="min-h-screen bg-gray-50" dir="rtl">
+      {/* Desktop floating dock */}
+      <aside className="hidden md:flex fixed top-1/2 -translate-y-1/2 right-5 z-50 flex-col items-center gap-1.5 bg-white/80 backdrop-blur-xl border border-white/70 rounded-[2rem] shadow-[0_20px_50px_-15px_rgba(53,133,142,0.35)] p-2.5">
+        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary-dark to-primary-main flex items-center justify-center text-white shadow-md mb-1">
+          <Store className="w-5 h-5" />
         </div>
-        <nav className="flex-1 px-4 space-y-2">
-          {navItems.map((item) => (
+        <div className="w-7 h-px bg-gray-200/80 my-0.5" />
+
+        {navItems.map((item) => {
+          const active = location.pathname === item.path;
+          return (
             <button
               key={item.path}
               onClick={() => navigate(item.path)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${
-                location.pathname === item.path
-                  ? 'bg-primary-light/20 text-primary-dark'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+              aria-label={item.label}
+              className={`group relative w-11 h-11 rounded-2xl flex items-center justify-center transition-all active:scale-95 ${
+                active
+                  ? 'bg-primary-dark text-white shadow-md shadow-primary-dark/30'
+                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700'
               }`}
             >
               <item.icon className="w-5 h-5" />
-              <span>{item.label}</span>
+              <span className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-3 translate-x-1 group-hover:translate-x-0 whitespace-nowrap bg-gray-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg">
+                {item.label}
+              </span>
             </button>
-          ))}
-        </nav>
-        <div className="p-4 border-t border-gray-100">
-          <button
-            onClick={onLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-rose-500 hover:bg-rose-50 rounded-xl font-bold transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-            <span>تسجيل الخروج</span>
-          </button>
-        </div>
+          );
+        })}
+
+        <div className="w-7 h-px bg-gray-200/80 my-0.5" />
+        <button
+          onClick={onLogout}
+          aria-label="تسجيل الخروج"
+          className="group relative w-11 h-11 rounded-2xl flex items-center justify-center text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-all active:scale-95"
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 mr-3 translate-x-1 group-hover:translate-x-0 whitespace-nowrap bg-rose-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-lg">
+            تسجيل الخروج
+          </span>
+        </button>
       </aside>
 
-        <main className="flex-1 flex flex-col h-screen overflow-y-auto w-full max-w-full pb-20 md:pb-0">
+        <main className="flex flex-col min-h-screen w-full max-w-full pb-24 md:pb-0 md:pr-24">
         {/* Mobile Header */}
         <header className="md:hidden bg-white px-4 py-4 border-b border-gray-200 flex justify-between items-center sticky top-0 z-10">
           <h2 className="font-black text-primary-dark">
