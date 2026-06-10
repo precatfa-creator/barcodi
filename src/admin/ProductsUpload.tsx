@@ -1,8 +1,9 @@
 import { useState, useRef, ChangeEvent, useMemo, useEffect, type DragEvent } from 'react';
-import { Upload, FileSpreadsheet, Package, CheckCircle2, AlertTriangle, Download, Plus, Trash2, Search, ChevronRight, ChevronLeft, Edit, X } from 'lucide-react';
+import { Upload, FileSpreadsheet, Package, CheckCircle2, AlertTriangle, Download, Plus, Trash2, Search, ChevronRight, ChevronLeft, Edit, X, Camera } from 'lucide-react';
 import { readSheet } from 'read-excel-file/browser';
 import { useAppContext } from '../AppContext';
 import { Product } from '../types';
+import BarcodeScanModal from './BarcodeScanModal';
 
 type ProductImportRow = Record<string, string | number | undefined>;
 
@@ -211,6 +212,7 @@ export default function ProductsUpload() {
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [showConfirmDeleteAll, setShowConfirmDeleteAll] = useState(false);
   const [isDraggingExcel, setIsDraggingExcel] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => 
@@ -443,7 +445,17 @@ export default function ProductsUpload() {
 
   return (
     <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100 relative">
-      
+
+      {showScanner && (
+        <BarcodeScanModal
+          onClose={() => setShowScanner(false)}
+          onDetected={(code) => {
+            setNewProduct((prev) => ({ ...prev, barcode: code }));
+            setShowScanner(false);
+          }}
+        />
+      )}
+
       {/* Non-blocking feedback messages */}
       {successInfo && (
         <div className="mb-4 p-4 bg-green-50 text-green-800 rounded-2xl border border-green-200 flex items-center justify-between">
@@ -671,7 +683,18 @@ export default function ProductsUpload() {
              </div>
              <div>
                <label className="block text-xs font-bold text-gray-500 mb-1">الباركود</label>
-               <input type="text" value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} className="w-full p-2 border rounded-lg" dir="ltr" placeholder="123456" />
+               <div className="flex gap-2">
+                 <input type="text" value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} className="w-full p-2 border rounded-lg" dir="ltr" placeholder="123456" />
+                 <button
+                   type="button"
+                   onClick={() => setShowScanner(true)}
+                   className="shrink-0 px-3 rounded-lg bg-primary-pale/70 text-primary-dark hover:bg-primary-light/50 transition-colors flex items-center justify-center"
+                   title="مسح الباركود بالكاميرا"
+                   aria-label="مسح الباركود بالكاميرا"
+                 >
+                   <Camera className="w-4 h-4" />
+                 </button>
+               </div>
              </div>
              <div>
                <label className="block text-xs font-bold text-gray-500 mb-1">السعر</label>
