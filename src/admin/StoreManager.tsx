@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Plus, Store, Link as LinkIcon, AlertCircle, CheckCircle, X, KeyRound, Copy, Wand2 } from 'lucide-react';
+import { Users, Trash2, Plus, Store, Link as LinkIcon, AlertCircle, CheckCircle, X, KeyRound, Copy, Wand2, PauseCircle, PlayCircle } from 'lucide-react';
 import { generateStrongPassword } from './passwordUtils';
 
 export default function StoreManager() {
@@ -21,7 +21,9 @@ export default function StoreManager() {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('adminToken')}` }
       });
       if (res.ok) {
-         setStores(await res.json());
+         const all = await res.json();
+         // The commander's own platform account (default) isn't a subscriber.
+         setStores(all.filter((s: any) => s.id !== 'default'));
       }
     } catch (error) {
       console.error('Failed to fetch stores:', error);
@@ -107,6 +109,37 @@ export default function StoreManager() {
 
   const handleDeleteClick = (store: any) => {
     setStoreToDelete(store);
+  };
+
+  const handleToggleSuspend = async (store: any) => {
+    if (store.id === 'default' || store.isOptimistic) return;
+    const nextSuspended = !store.suspended;
+
+    // Optimistic flip
+    setStores((prev) => prev.map((s) => (s.id === store.id ? { ...s, suspended: nextSuspended } : s)));
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const res = await fetch(`/api/admin/stores/${store.id}/suspend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('adminToken')}`,
+        },
+        body: JSON.stringify({ suspended: nextSuspended }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'تعذر تحديث حالة المتجر');
+      }
+      setSuccessMessage(nextSuspended ? `تم إيقاف متجر "${store.storeName}" مؤقتاً` : `تم إعادة تفعيل متجر "${store.storeName}"`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error: any) {
+      // Roll back on failure
+      setStores((prev) => prev.map((s) => (s.id === store.id ? { ...s, suspended: store.suspended } : s)));
+      setErrorMessage(error.message || 'خطأ في الاتصال أثناء تحديث حالة المتجر');
+    }
   };
 
   const openResetModal = (store: any) => {
@@ -300,8 +333,11 @@ export default function StoreManager() {
                  <tr key={store.id} className={`border-b last:border-0 border-gray-100 hover:bg-gray-50/50 transition-colors ${store.isOptimistic ? 'opacity-60 bg-green-50/30' : ''}`}>
                    <td className="px-4 py-4 font-bold text-gray-900">
                      <div className="flex items-center gap-2">
-                       <Store className="w-4 h-4 text-gray-400" />
-                       {store.storeName}
+                       <Store className={`w-4 h-4 ${store.suspended ? 'text-amber-500' : 'text-gray-400'}`} />
+                       <span className={store.suspended ? 'text-gray-400' : ''}>{store.storeName}</span>
+                       {store.suspended && (
+                         <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">موقوف</span>
+                       )}
                        {store.isOptimistic && (
                          <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-normal">جاري المزامنة...</span>
                        )}
@@ -321,6 +357,18 @@ export default function StoreManager() {
                        <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-primary-main bg-gray-50 hover:bg-primary-50 p-2 rounded-lg transition-colors" title="رابط المتجر">
                          <LinkIcon className="w-4 h-4" />
                        </a>
+                       <button
+                         onClick={() => handleToggleSuspend(store)}
+                         disabled={store.id === 'default' || store.isOptimistic}
+                         className={`p-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                           store.suspended
+                             ? 'text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                             : 'text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100'
+                         }`}
+                         title={store.suspended ? 'إعادة تفعيل المتجر' : 'إيقاف المتجر مؤقتاً'}
+                       >
+                         {store.suspended ? <PlayCircle className="w-4 h-4" /> : <PauseCircle className="w-4 h-4" />}
+                       </button>
                        <button
                          onClick={() => openResetModal(store)}
                          disabled={store.id === 'default' || store.isOptimistic || resettingStoreId === store.id}

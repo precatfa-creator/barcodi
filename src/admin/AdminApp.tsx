@@ -21,6 +21,9 @@ export default function AdminApp() {
         navigate('/admin/dashboard');
       } else {
         const err = await res.json();
+        if (err.suspended) {
+          throw new Error('تم إيقاف هذا الحساب مؤقتاً. يرجى التواصل مع إدارة المنصة.');
+        }
         throw new Error(err.error || 'بيانات الدخول غير صحيحة');
       }
     } catch (e: any) {
