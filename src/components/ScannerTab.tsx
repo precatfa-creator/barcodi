@@ -164,16 +164,37 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
     setFlashlightSupportKnown(false);
   }, []);
 
-  const markTorchCapability = (scanner: Html5Qrcode) => {
+  const probeTorchOnce = (scanner: Html5Qrcode) => {
     try {
       const track = (scanner as any).getRunningTrack?.();
       const caps = track?.getCapabilities?.() || {};
-      setFlashlightSupportKnown('torch' in caps);
-      setHasFlashlight(Boolean(caps.torch) || preferredFacingMode === 'environment');
+      if ('torch' in caps) {
+        setFlashlightSupportKnown(true);
+        setHasFlashlight(true);
+        return true;
+      }
     } catch {
-      setFlashlightSupportKnown(false);
-      setHasFlashlight(preferredFacingMode === 'environment');
+      // capabilities not readable yet
     }
+    return false;
+  };
+
+  const markTorchCapability = (scanner: Html5Qrcode) => {
+    // Some devices (notably Samsung/Chrome) don't expose the `torch` capability
+    // immediately after the camera starts — it appears a moment later. So probe
+    // now and again after the stream settles before deciding. Until we know, we
+    // still show the button for any rear camera (it may support torch).
+    setFlashlightSupportKnown(false);
+    setHasFlashlight(preferredFacingMode === 'environment');
+
+    if (probeTorchOnce(scanner)) return;
+
+    [500, 1200, 2500].forEach((delay) => {
+      window.setTimeout(() => {
+        if (!mountedRef.current || scannerRef.current !== scanner) return;
+        probeTorchOnce(scanner);
+      }, delay);
+    });
   };
 
   const handleBarcodeScanned = useCallback((decodedText: string) => {
