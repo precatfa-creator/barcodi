@@ -276,44 +276,40 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
           }
         };
 
+        // Resolve a concrete rear-camera deviceId first. Selecting by id is the
+        // most reliable way to guarantee the back camera across browsers —
+        // facingMode hints (even `exact`) are inconsistently honored and can
+        // fail outright on iOS. getCameras() also prompts for permission and
+        // lets us score labels, so rear-facing cameras sort to the front.
+        let preferredDeviceId = selectedCameraId;
+        if (!preferredDeviceId) {
+          const available = await refreshCameras();
+          if (available.length > 0) {
+            preferredDeviceId =
+              preferredFacingMode === 'environment'
+                ? available[0].id                       // sorted rear-first
+                : available[available.length - 1].id;   // most likely front
+          }
+        }
+
         const strategies: Array<{
           name: string;
           source: string | MediaTrackConstraints;
         }> = [];
 
-        if (selectedCameraId) {
-          strategies.push({ name: 'selected device', source: selectedCameraId });
+        // Primary: the resolved device id (single getUserMedia, no retry churn).
+        if (preferredDeviceId) {
+          strategies.push({ name: 'preferred device', source: preferredDeviceId });
         }
 
-        // Unless the user explicitly switched to the front camera, force the rear
-        // one. `exact` makes the browser refuse the front camera (vs `ideal`,
-        // which it can silently ignore). We only fall back to an unconstrained
-        // camera as a last resort — never to an explicit front-facing request.
-        if (preferredFacingMode === 'environment') {
-          strategies.push(
-            {
-              name: 'rear (exact environment)',
-              source: {
-                facingMode: { exact: 'environment' },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-                frameRate: { ideal: 30 },
-                focusMode: { ideal: 'continuous' },
-              } as MediaTrackConstraints,
-            },
-            {
-              name: 'rear (ideal environment)',
-              source: { facingMode: { ideal: 'environment' }, focusMode: { ideal: 'continuous' } } as MediaTrackConstraints,
-            },
-          );
-        } else {
-          strategies.push({
-            name: 'front camera',
-            source: { facingMode: { ideal: 'user' }, focusMode: { ideal: 'continuous' } } as MediaTrackConstraints,
-          });
-        }
+        // Fallback: facingMode hint, in case the device id is unavailable. We
+        // only request the front camera when the user explicitly chose it.
+        strategies.push({
+          name: preferredFacingMode === 'environment' ? 'rear (facingMode)' : 'front (facingMode)',
+          source: { facingMode: { ideal: preferredFacingMode }, focusMode: { ideal: 'continuous' } } as MediaTrackConstraints,
+        });
 
-        // Last resort: any available camera (still prefers the rear if present).
+        // Last resort: any available camera.
         strategies.push({
           name: 'any camera fallback',
           source: { facingMode: { ideal: 'environment' } } as MediaTrackConstraints,
@@ -361,8 +357,10 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         setCameraError('');
         markTorchCapability(startedScanner);
 
-        const devices = await refreshCameras();
-        setActiveCameraId(selectedCameraId || devices[0]?.id || '');
+        // The camera list was already populated before starting; re-probing
+        // getCameras() while the stream is live can fail on some devices, so
+        // just record which camera we ended up on.
+        setActiveCameraId(preferredDeviceId || selectedCameraId || '');
       } catch (err: any) {
         if (!mountedRef.current) return;
 
