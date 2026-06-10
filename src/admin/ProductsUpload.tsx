@@ -676,35 +676,42 @@ export default function ProductsUpload() {
         </div>
 
         {isAddingMode && (
-          <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-             <div>
-               <label className="block text-xs font-bold text-gray-500 mb-1">الاسم</label>
-               <input type="text" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full p-2 border rounded-lg" placeholder="اسم المنتج" />
-             </div>
-             <div>
-               <label className="block text-xs font-bold text-gray-500 mb-1">الباركود</label>
-               <div className="flex gap-2">
-                 <input type="text" value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} className="w-full p-2 border rounded-lg" dir="ltr" placeholder="123456" />
-                 <button
-                   type="button"
-                   onClick={() => setShowScanner(true)}
-                   className="shrink-0 px-3 rounded-lg bg-primary-pale/70 text-primary-dark hover:bg-primary-light/50 transition-colors flex items-center justify-center"
-                   title="مسح الباركود بالكاميرا"
-                   aria-label="مسح الباركود بالكاميرا"
-                 >
-                   <Camera className="w-4 h-4" />
-                 </button>
+          <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 mb-6 space-y-4">
+             {/* Row 1: name + barcode */}
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div>
+                 <label className="block text-xs font-bold text-gray-500 mb-1">الاسم</label>
+                 <input type="text" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full p-2 border rounded-lg" placeholder="اسم المنتج" />
+               </div>
+               <div>
+                 <label className="block text-xs font-bold text-gray-500 mb-1">الباركود</label>
+                 <div className="flex gap-2">
+                   <input type="text" value={newProduct.barcode} onChange={e => setNewProduct({...newProduct, barcode: e.target.value})} className="w-full p-2 border rounded-lg" dir="ltr" placeholder="123456" />
+                   <button
+                     type="button"
+                     onClick={() => setShowScanner(true)}
+                     className="shrink-0 px-3 rounded-lg bg-primary-pale/70 text-primary-dark hover:bg-primary-light/50 transition-colors flex items-center justify-center"
+                     title="مسح الباركود بالكاميرا"
+                     aria-label="مسح الباركود بالكاميرا"
+                   >
+                     <Camera className="w-4 h-4" />
+                   </button>
+                 </div>
                </div>
              </div>
-             <div>
-               <label className="block text-xs font-bold text-gray-500 mb-1">السعر</label>
-               <input type="number" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: Number(e.target.value)})} className="w-full p-2 border rounded-lg" dir="ltr" placeholder="0.00" />
-             </div>
-             <div className="flex items-end gap-2">
-               <button onClick={handleSaveProduct} className="flex-1 bg-primary-main hover:bg-primary-dark text-white font-bold p-2 text-sm rounded-lg h-[42px] transition-colors">{editingId ? 'حفظ التعديلات' : 'إضافة المنتج'}</button>
-               {editingId && (
-                 <button onClick={() => { setIsAddingMode(false); setEditingId(null); setNewProduct({ name: '', barcode: '', price: 0 }); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold p-2 text-sm rounded-lg h-[42px] transition-colors">إلغاء</button>
-               )}
+
+             {/* Row 2: price + action buttons */}
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+               <div>
+                 <label className="block text-xs font-bold text-gray-500 mb-1">السعر</label>
+                 <input type="number" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: Number(e.target.value)})} className="w-full p-2 border rounded-lg" dir="ltr" placeholder="0.00" />
+               </div>
+               <div className="flex items-end gap-2">
+                 <button onClick={handleSaveProduct} className="flex-1 bg-primary-main hover:bg-primary-dark text-white font-bold p-2 text-sm rounded-lg h-[42px] transition-colors">{editingId ? 'حفظ التعديلات' : 'إضافة المنتج'}</button>
+                 {editingId && (
+                   <button onClick={() => { setIsAddingMode(false); setEditingId(null); setNewProduct({ name: '', barcode: '', price: 0 }); }} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold p-2 text-sm rounded-lg h-[42px] transition-colors">إلغاء</button>
+                 )}
+               </div>
              </div>
           </div>
         )}
