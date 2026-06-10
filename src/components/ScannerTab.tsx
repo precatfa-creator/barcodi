@@ -285,23 +285,39 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
           strategies.push({ name: 'selected device', source: selectedCameraId });
         }
 
-        strategies.push(
-          {
-            name: 'rear facing mode',
-            source: {
-              facingMode: { ideal: preferredFacingMode },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              frameRate: { ideal: 30 },
-              focusMode: { ideal: 'continuous' } as any,
+        // Unless the user explicitly switched to the front camera, force the rear
+        // one. `exact` makes the browser refuse the front camera (vs `ideal`,
+        // which it can silently ignore). We only fall back to an unconstrained
+        // camera as a last resort — never to an explicit front-facing request.
+        if (preferredFacingMode === 'environment') {
+          strategies.push(
+            {
+              name: 'rear (exact environment)',
+              source: {
+                facingMode: { exact: 'environment' },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+                frameRate: { ideal: 30 },
+                focusMode: { ideal: 'continuous' },
+              } as MediaTrackConstraints,
             },
-          },
-          {
-            name: 'environment fallback',
-            source: { facingMode: 'environment', focusMode: { ideal: 'continuous' } as any },
-          },
-          { name: 'any camera fallback', source: { facingMode: 'user' } },
-        );
+            {
+              name: 'rear (ideal environment)',
+              source: { facingMode: { ideal: 'environment' }, focusMode: { ideal: 'continuous' } } as MediaTrackConstraints,
+            },
+          );
+        } else {
+          strategies.push({
+            name: 'front camera',
+            source: { facingMode: { ideal: 'user' }, focusMode: { ideal: 'continuous' } } as MediaTrackConstraints,
+          });
+        }
+
+        // Last resort: any available camera (still prefers the rear if present).
+        strategies.push({
+          name: 'any camera fallback',
+          source: { facingMode: { ideal: 'environment' } } as MediaTrackConstraints,
+        });
 
         let startedScanner: Html5Qrcode | null = null;
         let lastError: any = null;

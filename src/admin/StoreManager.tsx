@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Users, Trash2, Plus, Store, Link as LinkIcon, AlertCircle, CheckCircle, X, KeyRound, Copy } from 'lucide-react';
+import { Users, Trash2, Plus, Store, Link as LinkIcon, AlertCircle, CheckCircle, X, KeyRound, Copy, Wand2 } from 'lucide-react';
+import { generateStrongPassword } from './passwordUtils';
 
 export default function StoreManager() {
   const [stores, setStores] = useState<any[]>([]);
@@ -11,6 +12,8 @@ export default function StoreManager() {
   const [storeToDelete, setStoreToDelete] = useState<any | null>(null);
   const [resettingStoreId, setResettingStoreId] = useState<string | null>(null);
   const [resetPasswordResult, setResetPasswordResult] = useState<{ username: string; password: string } | null>(null);
+  const [resetTarget, setResetTarget] = useState<any | null>(null);
+  const [resetPasswordInput, setResetPasswordInput] = useState('');
 
   const fetchStores = async () => {
     try {
@@ -106,8 +109,25 @@ export default function StoreManager() {
     setStoreToDelete(store);
   };
 
-  const handleResetPassword = async (store: any) => {
+  const openResetModal = (store: any) => {
     if (store.id === 'default' || store.isOptimistic) return;
+    setResetTarget(store);
+    setResetPasswordInput('');
+    setErrorMessage(null);
+    setResetPasswordResult(null);
+  };
+
+  const submitResetPassword = async () => {
+    const store = resetTarget;
+    if (!store) return;
+
+    // A blank field tells the server to auto-generate; a filled field (8+ chars)
+    // sets it manually.
+    const manual = resetPasswordInput.trim();
+    if (manual && manual.length < 8) {
+      setErrorMessage('كلمة المرور يجب أن تكون 8 أحرف على الأقل');
+      return;
+    }
 
     setResettingStoreId(store.id);
     setErrorMessage(null);
@@ -121,7 +141,7 @@ export default function StoreManager() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
         },
-        body: JSON.stringify({})
+        body: JSON.stringify(manual ? { password: manual } : {})
       });
 
       const data = await res.json();
@@ -131,6 +151,8 @@ export default function StoreManager() {
 
       setResetPasswordResult({ username: data.username, password: data.newPassword });
       setSuccessMessage('تم إعادة تعيين كلمة المرور بنجاح');
+      setResetTarget(null);
+      setResetPasswordInput('');
     } catch (error: any) {
       setErrorMessage(error.message || 'خطأ في الاتصال أثناء إعادة تعيين كلمة المرور');
     } finally {
@@ -300,7 +322,7 @@ export default function StoreManager() {
                          <LinkIcon className="w-4 h-4" />
                        </a>
                        <button
-                         onClick={() => handleResetPassword(store)}
+                         onClick={() => openResetModal(store)}
                          disabled={store.id === 'default' || store.isOptimistic || resettingStoreId === store.id}
                          className="text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed p-2 rounded-lg transition-colors"
                          title={store.id === 'default' ? 'لا يمكن إعادة ضبط حساب القائد من هنا' : 'إعادة تعيين كلمة المرور'}
@@ -322,6 +344,58 @@ export default function StoreManager() {
            </tbody>
          </table>
       </div>
+
+      {/* Reset password modal: manual entry or suggest-strong */}
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100">
+            <h3 className="text-lg font-black text-gray-900 mb-1 flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-amber-600" />
+              إعادة تعيين كلمة المرور
+            </h3>
+            <p className="text-gray-500 text-sm mb-5">
+              لمتجر <span className="font-extrabold text-gray-900">"{resetTarget.storeName}"</span>. اكتب كلمة مرور جديدة، أو اتركها فارغة لتوليد واحدة تلقائياً.
+            </p>
+
+            <label className="block text-xs font-bold text-gray-500 mb-2">كلمة المرور الجديدة (اختياري)</label>
+            <div className="flex gap-2 mb-6">
+              <input
+                type="text"
+                value={resetPasswordInput}
+                onChange={(e) => setResetPasswordInput(e.target.value)}
+                className="flex-1 p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-primary-main font-mono text-sm"
+                dir="ltr"
+                placeholder="اتركها فارغة للتوليد التلقائي"
+              />
+              <button
+                type="button"
+                onClick={() => setResetPasswordInput(generateStrongPassword(16))}
+                className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 rounded-xl font-bold flex items-center gap-2 transition-colors shrink-0 text-sm"
+                title="اقتراح كلمة مرور قوية"
+              >
+                <Wand2 className="w-4 h-4" />
+                <span className="hidden sm:inline">اقتراح قوية</span>
+              </button>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setResetTarget(null); setResetPasswordInput(''); }}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl transition-colors text-sm"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={submitResetPassword}
+                disabled={resettingStoreId === resetTarget.id}
+                className="flex-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-xl transition-colors text-sm"
+              >
+                {resettingStoreId === resetTarget.id ? 'جاري الحفظ...' : 'تأكيد إعادة التعيين'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Elegant Custom Confirmation Modal for deletion */}
       {storeToDelete && (

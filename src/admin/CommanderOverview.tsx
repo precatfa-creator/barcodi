@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { 
-  Users, 
-  Store, 
-  Layers, 
-  Activity, 
-  TrendingUp, 
-  AlertTriangle, 
+import {
+  Users,
+  Store,
+  Layers,
+  Activity,
+  TrendingUp,
+  AlertTriangle,
   CheckCircle,
   FileText,
   Search,
@@ -13,13 +13,14 @@ import {
   Sparkles,
   ArrowRightLeft
 } from 'lucide-react';
+import ChangePasswordCard from './ChangePasswordCard';
 
 interface StoreData {
   id: string;
   username: string;
   storeName: string;
   storeLogo?: string;
-  products?: any[];
+  productsCount?: number;
   visits?: number;
   password?: string;
 }
@@ -53,11 +54,11 @@ export default function CommanderOverview() {
 
   // Calculate calculations
   const totalStores = stores.length;
-  const totalProducts = stores.reduce((sum, s) => sum + (s.products?.length || 0), 0);
+  const totalProducts = stores.reduce((sum, s) => sum + (s.productsCount || 0), 0);
   const avgProductsPerStore = totalStores > 0 ? Math.round(totalProducts / totalStores) : 0;
 
   // Sorting
-  const emptyStores = stores.filter(s => !s.products || s.products.length === 0);
+  const emptyStores = stores.filter(s => !s.productsCount);
 
   if (loading) {
     return (
@@ -196,6 +197,9 @@ export default function CommanderOverview() {
         </div>
 
       </div>
+
+      {/* Commander's own login password */}
+      <ChangePasswordCard />
 
     </div>
   );

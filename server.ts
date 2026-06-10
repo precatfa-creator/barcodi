@@ -335,19 +335,31 @@ const markSupabaseSuccess = () => {
   supabaseUnavailableUntil = 0;
 };
 
-const storesFingerprint = (stores: Record<string, StoreRecord>) => JSON.stringify(
-  Object.keys(stores)
-    .sort()
-    .map((id) => ({
-      id,
-      username: stores[id].username,
-      passwordHash: stores[id].passwordHash,
-      storeName: stores[id].storeName,
-      storeLogo: stores[id].storeLogo || '',
-      products: stores[id].products || [],
-      visits: stores[id].visits || 0,
-    }))
-);
+// Per-store content hash. Hashing each store independently avoids building one
+// giant JSON string for the whole database (which, with base64 product/logo
+// images, drove runaway memory use during the old full-table poll).
+const storeHash = (store: StoreRecord) =>
+  crypto
+    .createHash('sha1')
+    .update(
+      JSON.stringify({
+        username: store.username,
+        passwordHash: store.passwordHash,
+        storeName: store.storeName,
+        storeLogo: store.storeLogo || '',
+        products: store.products || [],
+        visits: store.visits || 0,
+      })
+    )
+    .digest('hex');
+
+const hashStoreMap = (stores: Record<string, StoreRecord>) => {
+  const map = new Map<string, string>();
+  for (const [id, store] of Object.entries(stores)) {
+    if (store) map.set(id, storeHash(store));
+  }
+  return map;
+};
 
 const storeToSupabaseRow = (store: StoreRecord) => ({
   id: store.id,
@@ -496,24 +508,32 @@ const loadDbFromSupabase = async () => {
 
     if (Object.keys(cloudStores).length > 0) {
       const previousStores = db.stores;
-      const hasChanged = storesFingerprint(previousStores) !== storesFingerprint(cloudStores);
+
+      // Preserve local edits that haven't been flushed to Supabase yet, so a
+      // reconcile can never roll back a change an admin just made.
+      for (const pendingId of pendingSupabaseStoreIds) {
+        if (previousStores[pendingId]) cloudStores[pendingId] = previousStores[pendingId];
+      }
+
+      const previousHashes = hashStoreMap(previousStores);
+      const cloudHashes = hashStoreMap(cloudStores);
       db.stores = cloudStores;
-      if (hasChanged) {
-        console.log("Loaded updated store data from Supabase.");
-        const touchedStoreIds = new Set([
-          ...Object.keys(previousStores),
-          ...Object.keys(cloudStores),
-        ]);
-        for (const storeId of touchedStoreIds) {
-          if (!cloudStores[storeId]) {
-            broadcastStoreDeleted(storeId);
-          } else if (
-            storesFingerprint({ [storeId]: previousStores[storeId] }) !==
-            storesFingerprint({ [storeId]: cloudStores[storeId] })
-          ) {
-            broadcastStoreUpdate(storeId);
-          }
+
+      const touchedStoreIds = new Set([...previousHashes.keys(), ...cloudHashes.keys()]);
+      let changed = false;
+      for (const storeId of touchedStoreIds) {
+        const before = previousHashes.get(storeId);
+        const after = cloudHashes.get(storeId);
+        if (before === after) continue;
+        changed = true;
+        if (!after) {
+          broadcastStoreDeleted(storeId);
+        } else {
+          broadcastStoreUpdate(storeId);
         }
+      }
+      if (changed) {
+        console.log('Loaded updated store data from Supabase.');
       }
     }
     markSupabaseSuccess();
@@ -524,10 +544,29 @@ const loadDbFromSupabase = async () => {
   }
 };
 
+// Reconcile in-memory state with Supabase when another instance (or admin)
+// changes data. We subscribe to Realtime for instant propagation instead of
+// polling the whole table every 30s — the old poll was both costly and a memory
+// hog. A slow safety poll covers the case where the realtime socket drops.
+function startSupabaseRealtime() {
+  if (!supabase) return;
+  supabase
+    .channel('stores-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, () => {
+      void loadDbFromSupabase();
+    })
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('Supabase realtime subscribed to store changes.');
+      }
+    });
+}
+
 const databaseReady = Promise.resolve();
 if (supabase) {
   void loadDbFromSupabase();
-  setInterval(loadDbFromSupabase, 30000);
+  startSupabaseRealtime();
+  setInterval(() => { void loadDbFromSupabase(); }, 5 * 60 * 1000);
 }
 
 function saveDb() {
@@ -712,12 +751,14 @@ app.get('/api/admin/store', authenticateToken, (req, res) => {
 
 // API: Get all stores (Super Admin only)
 app.get('/api/admin/all-stores', authenticateToken, requireCommander, (req, res) => {
+  // Deliberately omit the full products array: the commander UI only needs
+  // counts, and shipping every store's whole catalog here was a large, repeated
+  // payload (this endpoint is polled).
   const storesList = Object.values(db.stores).map((s: StoreRecord) => ({
     id: s.id,
     username: s.username,
     storeName: s.storeName,
     storeLogo: s.storeLogo,
-    products: s.products || [],
     productsCount: s.products?.length || 0,
     visits: s.visits || 0
   }));
@@ -770,6 +811,27 @@ app.post('/api/admin/stores/:id/reset-password', authenticateToken, requireComma
     username: store.username,
     newPassword,
   });
+});
+
+// API: Change my own password (any authenticated admin, incl. commander)
+app.post('/api/admin/change-password', authenticateToken, async (req, res) => {
+  const storeId = (req as any).user.storeId;
+  const store = db.stores[storeId];
+  if (!store) return res.status(404).json({ error: 'Not found' });
+
+  const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+  const newPassword = validatePasswordInput(req.body?.newPassword);
+  if (!newPassword) {
+    return res.status(400).json({ error: 'New password must be 8-128 characters' });
+  }
+  if (!store.passwordHash || !verifyPassword(currentPassword, store.passwordHash)) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  store.passwordHash = hashPassword(newPassword);
+  saveDbIfChanged();
+  await saveStoreToDatabase(storeId);
+  res.json({ success: true });
 });
 
 // API: Update Store Info (Admin)

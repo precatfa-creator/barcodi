@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Store, UploadCloud, LogOut, QrCode, Users, Search } from 'lucide-react';
+import { LayoutDashboard, Store, UploadCloud, LogOut, QrCode, Users } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import StoreSettingsForm from './StoreSettingsForm';
 import ProductsUpload from './ProductsUpload';
 import StoreManager from './StoreManager';
 import CommanderOverview from './CommanderOverview';
-import CommanderProductAudit from './CommanderProductAudit';
 import { useAppContext } from '../AppContext';
 
 interface Props {
@@ -45,8 +44,7 @@ export default function AdminDashboard({ onLogout }: Props) {
   const navItems = isCommander
     ? [
         { path: '/admin/dashboard', icon: LayoutDashboard, label: 'غرفة القيادة والعمليات' },
-        { path: '/admin/dashboard/subscribers', icon: Users, label: 'إدارة المشتركين والمتاجر' },
-        { path: '/admin/dashboard/audit', icon: Search, label: 'مراقبة السلع والمنتجات' }
+        { path: '/admin/dashboard/subscribers', icon: Users, label: 'إدارة المشتركين والمتاجر' }
       ]
     : [
         { path: '/admin/dashboard', icon: LayoutDashboard, label: 'لوحة القيادة' },
@@ -130,7 +128,6 @@ export default function AdminDashboard({ onLogout }: Props) {
                 <>
                   <Route path="/" element={<CommanderOverview />} />
                   <Route path="/subscribers" element={<StoreManager />} />
-                  <Route path="/audit" element={<CommanderProductAudit />} />
                 </>
               ) : (
                 <>

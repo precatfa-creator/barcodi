@@ -1,6 +1,7 @@
-import { useState, FormEvent, useRef, type ChangeEvent } from 'react';
+import { useState, FormEvent, useRef, useEffect, type ChangeEvent } from 'react';
 import { Store, Save, Image as ImageIcon, Upload } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import ChangePasswordCard from './ChangePasswordCard';
 
 export default function StoreSettingsForm() {
   const { storeSettings, setStoreSettings } = useAppContext();
@@ -9,6 +10,13 @@ export default function StoreSettingsForm() {
     name: storeSettings.name,
     logoUrl: storeSettings.logoUrl || '',
   });
+
+  // Store data loads asynchronously after this form first mounts. Re-sync the
+  // local form fields when it arrives, otherwise the inputs stay stuck on the
+  // "جاري التحميل..." placeholder until the user navigates away and back.
+  useEffect(() => {
+    setFormData({ name: storeSettings.name, logoUrl: storeSettings.logoUrl || '' });
+  }, [storeSettings.name, storeSettings.logoUrl]);
 
   const [savedMessage, setSavedMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -46,6 +54,7 @@ export default function StoreSettingsForm() {
   };
 
   return (
+    <div className="space-y-6">
     <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
       <div className="flex items-center gap-4 mb-8">
         <div className="p-3 bg-primary-light/30 text-primary-dark rounded-xl">
@@ -128,6 +137,9 @@ export default function StoreSettingsForm() {
           )}
         </div>
       </form>
+    </div>
+
+      <ChangePasswordCard />
     </div>
   );
 }
