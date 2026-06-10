@@ -17,6 +17,7 @@ export default function AdminDashboard({ onLogout }: Props) {
   const location = useLocation();
   const [storeId, setStoreId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const { loadStoreData } = useAppContext();
 
   useEffect(() => {
@@ -88,7 +89,7 @@ export default function AdminDashboard({ onLogout }: Props) {
 
         <div className="w-7 h-px bg-gray-200/80 my-0.5" />
         <button
-          onClick={onLogout}
+          onClick={() => setShowLogoutConfirm(true)}
           aria-label="تسجيل الخروج"
           className="group relative w-11 h-11 rounded-2xl flex items-center justify-center text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-all active:scale-95"
         >
@@ -105,7 +106,7 @@ export default function AdminDashboard({ onLogout }: Props) {
           <h2 className="font-black text-primary-dark">
             {isCommander ? 'لوحة التحكم' : 'إدارة متجرك'}
           </h2>
-          <button onClick={onLogout} className="p-2 text-rose-500">
+          <button onClick={() => setShowLogoutConfirm(true)} className="p-2 text-rose-500">
             <LogOut className="w-5 h-5" />
           </button>
         </header>
@@ -148,6 +149,32 @@ export default function AdminDashboard({ onLogout }: Props) {
           </div>
         </div>
       </main>
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-xs w-full p-6 shadow-2xl border border-gray-100 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4">
+              <LogOut className="w-7 h-7" />
+            </div>
+            <h3 className="text-lg font-black text-gray-900 mb-1">تسجيل الخروج</h3>
+            <p className="text-sm text-gray-500 mb-6">هل أنت متأكد من رغبتك في الخروج من لوحة التحكم؟</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl text-sm transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={onLogout}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-sm transition-colors"
+              >
+                خروج
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
