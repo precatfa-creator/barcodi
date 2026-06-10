@@ -71,12 +71,24 @@ export function CartTab({
       });
       
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      // Calculate dynamic image height relative to PDF page width to keep original aspect ratio perfectly
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      // Full image height scaled to the page width (keeps aspect ratio).
       const pdfHeight = (img.height * pdfWidth) / img.width;
-      
-      // Since it's a high-quality invoice sheet, start rendering right from the top 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      
+
+      // Slice the tall invoice across as many pages as needed. Each page shows
+      // the same image shifted up by one page height, so long carts no longer
+      // get clipped at the bottom of page one.
+      let heightLeft = pdfHeight;
+      let position = 0;
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+      while (heightLeft > 0) {
+        position -= pageHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+      }
+
       // Clean, Arabic dynamic filename based on store name
       const safeStoreName = storeName.trim().replace(/\s+/g, '_');
       pdf.save(`فاتورة_مشتريات_${safeStoreName}.pdf`);
@@ -264,9 +276,12 @@ export function CartTab({
           className="bg-white p-10 w-[680px] text-right font-sans border border-gray-100" 
           style={{ direction: 'rtl', fontFamily: '"Cairo", sans-serif' }}
         >
-          {/* Top colored accent */}
-          <div className="h-2 bg-[#35858E] -mx-10 -mt-10 mb-8" />
-          
+          {/* Top colored accent with brand */}
+          <div className="-mx-10 -mt-10 mb-8 px-10 py-3 bg-gradient-to-l from-[#35858E] to-[#7DA78C] flex items-center justify-between">
+            <span className="text-white font-black text-lg tracking-wide" style={{ direction: 'ltr' }}>Barcodi</span>
+            <span className="text-white/85 text-[11px] font-bold">باركودي · قارئ الأسعار الذكي</span>
+          </div>
+
           {/* Invoice Header */}
           <div className="flex justify-between items-start border-b border-gray-100 pb-6 mb-8">
             <div className="space-y-1">
@@ -276,7 +291,7 @@ export function CartTab({
               <p className="text-gray-500 text-xs font-semibold">الفرع الرئيسي • طرابلس، ليبيا</p>
               <p className="text-gray-400 text-[10px]">نظام الخدمة الذاتية • هاتف: 091-0000000</p>
             </div>
-            
+
             <div className="text-left">
               <span className="inline-block bg-[#35858E]/10 text-[#35858E] font-black text-xs px-3.5 py-1 rounded-md mb-3">
                 فاتورة مشتريات تقديرية
@@ -364,6 +379,9 @@ export function CartTab({
             </div>
             <h3 className="text-sm font-black text-gray-800 mb-1">شكراً لزيارتكم {storeName}!</h3>
             <p className="text-[10px] text-gray-400">يسعدنا دائماً خدمتكم وتوفير أفضل تجربة تسوق</p>
+            <p className="text-[10px] text-gray-400 mt-3 pt-3 border-t border-gray-100 w-full">
+              مدعوم بواسطة <span className="font-black text-[#35858E]" style={{ direction: 'ltr' }}>Barcodi</span> — باركودي
+            </p>
           </div>
         </div>
       </div>
