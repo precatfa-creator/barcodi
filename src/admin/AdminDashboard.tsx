@@ -204,7 +204,7 @@ function Overview({ storeId }: { storeId: string | null }) {
         `<style>` +
         `*{box-sizing:border-box}` +
         `html,body{margin:0}` +
-        `body{font-family:'Cairo',system-ui,sans-serif;color:#1f2937;background:#f3f4f6;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}` +
+        `body{font-family:'Cairo',system-ui,sans-serif;color:#1f2937;background:#f3f4f6;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;-webkit-print-color-adjust:exact;print-color-adjust:exact}` +
         `.card{width:420px;max-width:100%;background:#fff;border:1px solid #e5e7eb;border-radius:28px;overflow:hidden;text-align:center;box-shadow:0 12px 44px rgba(53,133,142,.12)}` +
         `.accent{height:8px;background:linear-gradient(90deg,#35858E,#7DA78C,#C2D099)}` +
         `.brandrow{display:flex;align-items:center;justify-content:center;gap:10px;padding:24px 24px 4px}` +
@@ -222,7 +222,26 @@ function Overview({ storeId }: { storeId: string | null }) {
         `.url{direction:ltr;font-size:11px;color:#6b7280;background:#f9fafb;border:1px dashed #d1d5db;border-radius:10px;padding:8px 12px;margin:0 24px;word-break:break-all}` +
         `.foot{font-size:11px;color:#9ca3af;padding:18px 24px 24px}` +
         `.foot b{color:#35858E}` +
-        `@media print{body{background:#fff;padding:0;padding-top:24px;min-height:auto;display:block}.card{box-shadow:none;margin:0 auto}}` +
+        `@page{size:A4;margin:10mm}` +
+        `@media print{` +
+        `body{background:#fff;padding:0;min-height:auto;display:block}` +
+        `.card{width:100%;max-width:none;min-height:277mm;border:none;border-radius:0;box-shadow:none;display:flex;flex-direction:column;justify-content:space-between}` +
+        `.accent{height:10px}` +
+        `.brandrow{padding-top:6mm;gap:14px}` +
+        `.logo{width:60px;height:60px;border-radius:18px}` +
+        `.bn{font-size:34px}` +
+        `.ba{font-size:16px}` +
+        `.store{font-size:44px;margin:6mm 0 2mm}` +
+        `.tag{font-size:20px;margin-bottom:0}` +
+        `.qrwrap{flex:1;align-items:center;margin:0}` +
+        `.qr{padding:8mm;border-width:3px}` +
+        `.qr svg{width:150mm;height:150mm}` +
+        `.steps{gap:14px;margin:0 0 4mm}` +
+        `.step{font-size:18px;padding:10px 18px}` +
+        `.num{width:26px;height:26px;font-size:15px}` +
+        `.url{font-size:15px;padding:12px 16px;margin:0 10mm}` +
+        `.foot{font-size:15px;padding:6mm 0}` +
+        `}` +
         `</style></head><body>` +
         `<div class="card">` +
         `<div class="accent"></div>` +
