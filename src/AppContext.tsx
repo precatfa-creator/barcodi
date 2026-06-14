@@ -7,6 +7,7 @@ interface AppContextProps {
   storeSettings: StoreSettings;
   setStoreSettings: (settings: StoreSettings) => void;
   loadStoreData: (storeId: string) => Promise<void>;
+  loadStoreInfo: (storeId: string) => Promise<void>;
   subscribeToStoreData: (storeId: string) => () => void;
   registerVisit: (storeId: string) => void;
   addProduct: (product: Partial<Product>) => Promise<boolean>;
@@ -87,6 +88,32 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  // Loads store status only (name/logo/suspended), not the catalog. Shoppers
+  // resolve products per-scan via the indexed lookup endpoint instead of
+  // downloading the whole list.
+  const loadStoreInfo = useCallback(async (storeId: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/public/store/${storeId}`);
+      if (res.ok) {
+        const storeData = await res.json();
+        setStoreSuspended(Boolean(storeData.suspended));
+        if (storeData.storeName) {
+          setStoreSettingsState(prev => ({
+            ...prev,
+            name: storeData.storeName,
+            logoUrl: storeData.storeLogo || null,
+            visits: storeData.visits ?? prev.visits,
+          }));
+        }
+      }
+    } catch {
+      // ignore; UI shows defaults
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const applyStorePayload = useCallback((storeData: any) => {
     setStoreSuspended(Boolean(storeData.suspended));
     if (storeData.storeName) {
@@ -97,10 +124,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         visits: storeData.visits ?? prev.visits
       }));
     }
-
-    if (Array.isArray(storeData.products)) {
-      setProductsState(storeData.products);
-    }
+    // Catalog no longer travels over realtime; products are fetched per-scan.
   }, []);
 
   const subscribeToStoreData = useCallback((storeId: string) => {
@@ -266,7 +290,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, subscribeToStoreData, registerVisit, addProduct, updateProduct, deleteProduct, clearProducts, importProducts, loading, storeSuspended }}>
+    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, loadStoreInfo, subscribeToStoreData, registerVisit, addProduct, updateProduct, deleteProduct, clearProducts, importProducts, loading, storeSuspended }}>
       {children}
     </AppContext.Provider>
   );

@@ -464,10 +464,11 @@ const persistProductChange = async (supabaseOp: () => Promise<void>): Promise<bo
 
 const storeEventClients = new Map<string, Set<StoreEventClient>>();
 
+// Shoppers fetch products per-scan now, so realtime only carries store status
+// (name/logo/suspended) — no catalog payload.
 const getPublicStorePayload = (store: StoreRecord) => ({
   storeName: store.storeName,
   storeLogo: store.storeLogo,
-  products: store.suspended ? [] : store.products || [],
   visits: store.visits || 0,
   suspended: Boolean(store.suspended),
 });
@@ -970,6 +971,39 @@ app.get('/api/public/products/:storeId', publicApiLimiter, (req, res) => {
   } else {
     res.status(404).json({ error: 'Store not found' });
   }
+});
+
+// API: Look up a single product by barcode (the shopper scan path).
+// Uses the indexed products table so the phone fetches only the scanned item
+// instead of downloading the whole catalog.
+app.get('/api/public/store/:storeId/product/:barcode', publicApiLimiter, async (req, res) => {
+  const store = db.stores[req.params.storeId];
+  if (!store) return res.status(404).json({ error: 'Store not found' });
+  if (store.suspended) return res.status(404).json({ error: 'unavailable' });
+
+  const barcode = String(req.params.barcode || '').trim();
+  if (!barcode) return res.status(400).json({ error: 'barcode required' });
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('store_id', store.id)
+        .eq('barcode', barcode)
+        .limit(1);
+      if (error) throw error;
+      const product = data && data[0] ? rowToProduct(data[0]) : null;
+      if (product) return res.json({ product });
+    } catch {
+      // fall through to the in-memory cache
+    }
+  }
+
+  // Fallback (file mode, or DB miss): the server always holds the full catalog
+  // in memory, and this also matches products keyed by id (legacy test data).
+  const local = (store.products || []).find((p) => p.barcode === barcode || p.id === barcode);
+  return local ? res.json({ product: local }) : res.status(404).json({ product: null });
 });
 
 // API: Get My Store Admin Info
