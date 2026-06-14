@@ -131,24 +131,38 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const setProducts = useCallback(async (newProducts: Product[]) => {
     setProductsState(newProducts);
     const token = localStorage.getItem('adminToken');
-    if (token) {
-       await fetch('/api/admin/products', {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-         body: JSON.stringify({ products: newProducts })
-       });
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ products: newProducts })
+      });
+      if (!res.ok) throw new Error('save failed');
+    } catch {
+      // The server did NOT durably store the change — tell the admin instead of
+      // silently pretending it saved.
+      if (typeof window !== 'undefined') {
+        window.alert('تعذّر حفظ التغييرات على الخادم. لم يتم الحفظ، يرجى المحاولة مرة أخرى.');
+      }
     }
   }, []);
 
   const setStoreSettings = useCallback(async (newSettings: StoreSettings) => {
     setStoreSettingsState(newSettings);
     const token = localStorage.getItem('adminToken');
-    if (token) {
-       await fetch('/api/admin/store', {
-         method: 'PUT',
-         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-         body: JSON.stringify({ storeName: newSettings.name, storeLogo: newSettings.logoUrl })
-       });
+    if (!token) return;
+    try {
+      const res = await fetch('/api/admin/store', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ storeName: newSettings.name, storeLogo: newSettings.logoUrl })
+      });
+      if (!res.ok) throw new Error('save failed');
+    } catch {
+      if (typeof window !== 'undefined') {
+        window.alert('تعذّر حفظ الإعدادات على الخادم. لم يتم الحفظ، يرجى المحاولة مرة أخرى.');
+      }
     }
   }, []);
 
