@@ -17,11 +17,11 @@ import { useAppContext } from './AppContext';
 
 export default function App() {
   const { storeId } = useParams<{ storeId: string }>();
-  const { storeSettings, products, loadStoreData, subscribeToStoreData, registerVisit, loading, storeSuspended } = useAppContext();
+  const { storeSettings, loadStoreInfo, subscribeToStoreData, registerVisit, loading, storeSuspended } = useAppContext();
 
   useEffect(() => {
     if (storeId) {
-      loadStoreData(storeId);
+      loadStoreInfo(storeId);
       registerVisit(storeId);
       return subscribeToStoreData(storeId);
     }
@@ -205,6 +205,7 @@ export default function App() {
                 )}
                 <div className={scannedProduct ? 'hidden' : 'block'}>
                   <ScannerTab
+                    storeId={storeId || ''}
                     onProductFound={handleProductScanTriggered}
                     settings={settings}
                     isPaused={!!scannedProduct}

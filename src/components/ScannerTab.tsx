@@ -7,9 +7,9 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Camera, Barcode, AlertTriangle, CornerDownLeft, Sparkles, Zap, ZapOff, FlipHorizontal } from 'lucide-react';
 import { Product, AppSettings } from '../types';
-import { useAppContext } from '../AppContext';
 
 interface ScannerTabProps {
+  storeId: string;
   onProductFound: (product: Product) => void;
   settings: AppSettings;
   isPaused?: boolean;
@@ -87,15 +87,13 @@ export function playBeepSound() {
   }
 }
 
-export function ScannerTab({ onProductFound, settings, isPaused = false }: ScannerTabProps) {
-  const { products } = useAppContext();
-
-  const productsRef = useRef(products);
-  productsRef.current = products;
+export function ScannerTab({ storeId, onProductFound, settings, isPaused = false }: ScannerTabProps) {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const onProductFoundRef = useRef(onProductFound);
   onProductFoundRef.current = onProductFound;
+  const storeIdRef = useRef(storeId);
+  storeIdRef.current = storeId;
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const mountedRef = useRef(true);
@@ -103,6 +101,7 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
   const startTimerRef = useRef<number | null>(null);
   const lastRejectedBarcodeRef = useRef('');
   const rejectCooldownUntilRef = useRef(0);
+  const resolvingRef = useRef(false);
 
   const [activeMode, setActiveMode] = useState<'camera' | 'manual'>('camera');
   const [manualCode, setManualCode] = useState('');
@@ -199,10 +198,13 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
 
   const handleBarcodeScanned = useCallback((decodedText: string) => {
     const clean = decodedText.trim();
-    if (!clean) return false;
+    if (!clean) return;
+    // The decoder fires every frame; ignore new reads while a lookup is running.
+    if (resolvingRef.current) return;
 
     const currentSettings = settingsRef.current;
     if (currentSettings.isTestMode) {
+      resolvingRef.current = true;
       playBeepSound();
       stopCameraScanner();
       onProductFoundRef.current({
@@ -215,24 +217,35 @@ export function ScannerTab({ onProductFound, settings, isPaused = false }: Scann
         weight: 'قطعة واحدة',
         description: 'هذا منتج وهمي تم إنشاؤه أثناء وضع الاختبار.',
       });
-      return true;
+      return;
     }
 
-    const product = productsRef.current.find((item) => item.barcode === clean || item.id === clean);
-    if (product) {
-      playBeepSound();
-      stopCameraScanner();
-      onProductFoundRef.current(product);
-      return true;
-    }
+    resolvingRef.current = true;
+    void (async () => {
+      try {
+        // Indexed server lookup — fetch only the scanned item, not the catalog.
+        const res = await fetch(`/api/public/store/${storeIdRef.current}/product/${encodeURIComponent(clean)}`);
+        const product: Product | null = res.ok ? (await res.json()).product : null;
 
-    const now = performance.now();
-    if (lastRejectedBarcodeRef.current !== clean || now > rejectCooldownUntilRef.current) {
-      lastRejectedBarcodeRef.current = clean;
-      rejectCooldownUntilRef.current = now + 2200;
-      setCameraError(`تمت قراءة الباركود (${clean}) لكنه غير موجود في منتجات هذا المتجر.`);
-    }
-    return false;
+        if (product) {
+          playBeepSound();
+          await stopCameraScanner();
+          onProductFoundRef.current(product);
+          return;
+        }
+
+        const now = performance.now();
+        if (lastRejectedBarcodeRef.current !== clean || now > rejectCooldownUntilRef.current) {
+          lastRejectedBarcodeRef.current = clean;
+          rejectCooldownUntilRef.current = now + 2200;
+          setCameraError(`تمت قراءة الباركود (${clean}) لكنه غير موجود في منتجات هذا المتجر.`);
+        }
+      } catch {
+        setCameraError('تعذّر التحقق من المنتج. تأكد من الاتصال بالإنترنت وحاول مرة أخرى.');
+      } finally {
+        resolvingRef.current = false;
+      }
+    })();
   }, [stopCameraScanner]);
 
   const refreshCameras = useCallback(async () => {
