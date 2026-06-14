@@ -193,7 +193,7 @@ const downloadXlsx = (rows: ProductImportRow[], filename: string) => {
 };
 
 export default function ProductsUpload() {
-  const { products, setProducts } = useAppContext();
+  const { products, addProduct, updateProduct, deleteProduct, clearProducts, importProducts } = useAppContext();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Product[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -228,43 +228,41 @@ export default function ProductsUpload() {
     setCurrentPage(1);
   }, [searchTerm, products.length]);
 
-  const handleSaveProduct = () => {
+  const handleSaveProduct = async () => {
     if (!newProduct.name || !newProduct.barcode || newProduct.price === undefined) {
        setErrorInfo("الرجاء تعبئة الاسم والباركود والسعر");
        return;
     }
-    
+
+    let ok = false;
     if (editingId) {
-       const updatedProducts = products.map(p => {
-          if (p.id === editingId) {
-             return {
-                ...p,
-                name: newProduct.name || '',
-                barcode: newProduct.barcode || '',
-                price: Number(newProduct.price) || 0,
-             } as Product;
-          }
-          return p;
+       ok = await updateProduct(editingId, {
+         name: newProduct.name || '',
+         barcode: newProduct.barcode || '',
+         price: Number(newProduct.price) || 0,
        });
-       setProducts(updatedProducts);
-       setSuccessInfo("تم تعديل المنتج بنجاح!");
-       setTimeout(() => setSuccessInfo(null), 3000);
+       if (ok) {
+         setSuccessInfo("تم تعديل المنتج بنجاح!");
+         setTimeout(() => setSuccessInfo(null), 3000);
+       }
     } else {
-       const p: Product = {
-           id: Date.now().toString(),
-           name: newProduct.name || '',
-           barcode: newProduct.barcode || '',
-           price: Number(newProduct.price) || 0,
-           category: newProduct.category || 'general',
-           description: newProduct.description || '',
-           imageEmoji: newProduct.imageEmoji || '📦',
-           stock: newProduct.stock,
-       };
-       setProducts([...products, p]);
-       setSuccessInfo("تم إضافة المنتج بنجاح!");
-       setTimeout(() => setSuccessInfo(null), 3000);
+       ok = await addProduct({
+         name: newProduct.name || '',
+         barcode: newProduct.barcode || '',
+         price: Number(newProduct.price) || 0,
+         category: newProduct.category || 'general',
+         description: newProduct.description || '',
+         imageEmoji: newProduct.imageEmoji || '📦',
+         stock: newProduct.stock,
+       });
+       if (ok) {
+         setSuccessInfo("تم إضافة المنتج بنجاح!");
+         setTimeout(() => setSuccessInfo(null), 3000);
+       }
     }
-    
+
+    if (!ok) return; // keep the form open so the admin can retry
+
     setIsAddingMode(false);
     setEditingId(null);
     setNewProduct({ name: '', barcode: '', price: 0 });
@@ -291,11 +289,14 @@ export default function ProductsUpload() {
     }
   };
 
-  const confirmDeleteProduct = () => {
+  const confirmDeleteProduct = async () => {
     if (productToDelete) {
-      setProducts(products.filter(p => p.id !== productToDelete.id));
-      setSuccessInfo(`تم حذف المنتج "${productToDelete.name}" بنجاح`);
-      setTimeout(() => setSuccessInfo(null), 3000);
+      const name = productToDelete.name;
+      const ok = await deleteProduct(productToDelete.id);
+      if (ok) {
+        setSuccessInfo(`تم حذف المنتج "${name}" بنجاح`);
+        setTimeout(() => setSuccessInfo(null), 3000);
+      }
       setProductToDelete(null);
     }
   };
@@ -304,10 +305,12 @@ export default function ProductsUpload() {
     setShowConfirmDeleteAll(true);
   };
 
-  const confirmDeleteAll = () => {
-    setProducts([]);
-    setSuccessInfo("تم إفراغ جميع المنتجات بنجاح");
-    setTimeout(() => setSuccessInfo(null), 3000);
+  const confirmDeleteAll = async () => {
+    const ok = await clearProducts();
+    if (ok) {
+      setSuccessInfo("تم إفراغ جميع المنتجات بنجاح");
+      setTimeout(() => setSuccessInfo(null), 3000);
+    }
     setShowConfirmDeleteAll(false);
   };
 
@@ -415,32 +418,16 @@ export default function ProductsUpload() {
     }
   };
 
-  const handleConfirmUpload = () => {
-    if (preview.length > 0) {
-      // Merge with existing products by barcode
-      const existingProducts = [...products];
-      let newCount = 0;
-      let updatedCount = 0;
-
-      preview.forEach((uploadedP) => {
-        const existingIdx = existingProducts.findIndex((p) => p.barcode === uploadedP.barcode && p.barcode !== '');
-        if (existingIdx !== -1) {
-          // Update
-          existingProducts[existingIdx] = { ...existingProducts[existingIdx], ...uploadedP, id: existingProducts[existingIdx].id }; // preserve original id
-          updatedCount++;
-        } else {
-          // Add
-          existingProducts.push(uploadedP);
-          newCount++;
-        }
-      });
-
-      setProducts(existingProducts);
-      setFile(null);
-      setPreview([]);
-      setSuccessInfo(`تم الاستيراد بنجاح! منتجات جديدة: ${newCount}، منتجات محدثة: ${updatedCount}.`);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+  const handleConfirmUpload = async () => {
+    if (preview.length === 0) return;
+    // The server merges by barcode against its authoritative list, so an import
+    // never drops products that aren't in the uploaded file.
+    const result = await importProducts(preview);
+    if (!result) return;
+    setFile(null);
+    setPreview([]);
+    setSuccessInfo(`تم الاستيراد بنجاح! منتجات جديدة: ${result.added}، منتجات محدثة: ${result.updated}.`);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
