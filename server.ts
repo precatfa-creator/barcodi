@@ -369,13 +369,14 @@ const hashStoreMap = (stores: Record<string, StoreRecord>) => {
   return map;
 };
 
+// Products now live in their own table, so the store row no longer carries the
+// products blob. (The legacy stores.products column is left untouched.)
 const storeToSupabaseRow = (store: StoreRecord) => ({
   id: store.id,
   username: store.username,
   password_hash: store.passwordHash,
   store_name: store.storeName,
   store_logo: store.storeLogo || '',
-  products: store.products || [],
   visits: store.visits || 0,
   suspended: Boolean(store.suspended),
 });
@@ -388,10 +389,77 @@ const supabaseRowToStore = (row: any): StoreRecord | null => {
     passwordHash: row.password_hash,
     storeName: sanitizeText(row.store_name, 120) || 'Store',
     storeLogo: validateStoreLogo(row.store_logo) || '',
-    products: normalizeProducts(row.products || []) || [],
+    products: [], // hydrated from the products table
     visits: Number.isFinite(Number(row.visits)) ? Number(row.visits) : 0,
     suspended: Boolean(row.suspended),
   };
+};
+
+const productToRow = (storeId: string, p: ProductRecord) => ({
+  id: p.id,
+  store_id: storeId,
+  barcode: p.barcode || '',
+  name: p.name,
+  price: p.price,
+  category: p.category || 'general',
+  description: p.description || '',
+  image_emoji: p.imageEmoji || '📦',
+  image_url: p.imageUrl ?? null,
+  stock: p.stock ?? null,
+  calories: p.calories ?? null,
+  weight: p.weight ?? null,
+  updated_at: new Date().toISOString(),
+});
+
+const rowToProduct = (row: any): ProductRecord | null =>
+  normalizeProduct(
+    {
+      id: row.id,
+      name: row.name,
+      barcode: row.barcode,
+      price: row.price,
+      category: row.category,
+      description: row.description,
+      imageEmoji: row.image_emoji,
+      imageUrl: row.image_url ?? undefined,
+      stock: row.stock ?? undefined,
+      calories: row.calories ?? undefined,
+      weight: row.weight ?? undefined,
+    },
+    0
+  );
+
+// Load all products grouped by store id from the products table.
+const fetchProductsByStore = async (): Promise<Record<string, ProductRecord[]>> => {
+  const grouped: Record<string, ProductRecord[]> = {};
+  if (!supabase) return grouped;
+  const { data, error } = await supabase.from('products').select('*');
+  if (error) throw error;
+  for (const row of data || []) {
+    const product = rowToProduct(row);
+    if (!product) continue;
+    (grouped[row.store_id] ||= []).push(product);
+  }
+  return grouped;
+};
+
+// Persist a product change to durable storage and report success. Writes a
+// local file mirror, then the Supabase row op; falls back gracefully on failure.
+const persistProductChange = async (supabaseOp: () => Promise<void>): Promise<boolean> => {
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  } catch {
+    // ignore (read-only FS)
+  }
+  if (!supabase) return true;
+  try {
+    await supabaseOp();
+    markSupabaseSuccess();
+    return true;
+  } catch (err) {
+    markSupabaseFailure('Product write to Supabase failed', err);
+    return false;
+  }
 };
 
 const storeEventClients = new Map<string, Set<StoreEventClient>>();
@@ -547,10 +615,15 @@ const loadDbFromSupabase = async () => {
       return;
     }
 
+    const productsByStore = await fetchProductsByStore();
+
     const cloudStores: Record<string, StoreRecord> = {};
     for (const row of data) {
       const store = supabaseRowToStore(row);
-      if (store) cloudStores[store.id] = store;
+      if (store) {
+        store.products = productsByStore[store.id] || [];
+        cloudStores[store.id] = store;
+      }
     }
 
     if (Object.keys(cloudStores).length > 0) {
@@ -591,6 +664,50 @@ const loadDbFromSupabase = async () => {
   }
 };
 
+// --- Products table write helpers -----------------------------------------
+const upsertProductRows = async (storeId: string, products: ProductRecord[]) => {
+  if (!supabase || products.length === 0) return;
+  const { error } = await supabase
+    .from('products')
+    .upsert(products.map((p) => productToRow(storeId, p)), { onConflict: 'id' });
+  if (error) throw error;
+};
+
+const deleteProductRow = async (id: string) => {
+  if (!supabase) return;
+  const { error } = await supabase.from('products').delete().eq('id', id);
+  if (error) throw error;
+};
+
+const deleteProductsForStore = async (storeId: string) => {
+  if (!supabase) return;
+  const { error } = await supabase.from('products').delete().eq('store_id', storeId);
+  if (error) throw error;
+};
+
+// One-time migration: copy products from the legacy stores.products JSONB into
+// the products table, then clear the blob so deleted items can't resurrect.
+const migrateJsonbProductsToTable = async () => {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from('stores').select('id, products');
+    if (error) throw error;
+    const existing = await fetchProductsByStore();
+    for (const row of data || []) {
+      const blob = Array.isArray(row.products) ? row.products : [];
+      if (blob.length === 0) continue;
+      if ((existing[row.id] || []).length > 0) continue; // already migrated
+      const normalized = normalizeProducts(blob) || [];
+      if (normalized.length === 0) continue;
+      await upsertProductRows(row.id, normalized);
+      await supabase.from('stores').update({ products: [] }).eq('id', row.id);
+      console.log(`Migrated ${normalized.length} products for store ${row.id} into the products table.`);
+    }
+  } catch (err) {
+    console.warn('Product migration skipped/failed:', getErrorMessage(err));
+  }
+};
+
 // Reconcile in-memory state with Supabase when another instance (or admin)
 // changes data. We subscribe to Realtime for instant propagation instead of
 // polling the whole table every 30s — the old poll was both costly and a memory
@@ -598,22 +715,27 @@ const loadDbFromSupabase = async () => {
 function startSupabaseRealtime() {
   if (!supabase) return;
   supabase
-    .channel('stores-changes')
+    .channel('barcodi-changes')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, () => {
+      void loadDbFromSupabase();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
       void loadDbFromSupabase();
     })
     .subscribe((status) => {
       if (status === 'SUBSCRIBED') {
-        console.log('Supabase realtime subscribed to store changes.');
+        console.log('Supabase realtime subscribed to store & product changes.');
       }
     });
 }
 
-const databaseReady = Promise.resolve();
+const databaseReady = supabase ? migrateJsonbProductsToTable() : Promise.resolve();
 if (supabase) {
-  void loadDbFromSupabase();
-  startSupabaseRealtime();
-  setInterval(() => { void loadDbFromSupabase(); }, 5 * 60 * 1000);
+  databaseReady.then(() => {
+    void loadDbFromSupabase();
+    startSupabaseRealtime();
+    setInterval(() => { void loadDbFromSupabase(); }, 5 * 60 * 1000);
+  });
 }
 
 function saveDb() {
@@ -928,6 +1050,8 @@ app.delete('/api/admin/stores/:id', authenticateToken, requireCommander, async (
       db.stores[idToRemove] = removed;
       return res.status(503).json({ error: 'تعذّر حذف المتجر، يرجى المحاولة مرة أخرى' });
     }
+    // Remove the store's products too (best-effort; store row is already gone).
+    try { await deleteProductsForStore(idToRemove); } catch { /* orphan cleanup can retry later */ }
     broadcastStoreDeleted(idToRemove);
     res.json({ success: true });
   } else {
@@ -1022,9 +1146,14 @@ app.post('/api/admin/products', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Invalid products format' });
   }
 
+  const previous = db.stores[storeId].products || [];
   db.stores[storeId].products = products;
-  const ok = await persistStoreNow(storeId);
+  const ok = await persistProductChange(async () => {
+    await deleteProductsForStore(storeId);
+    await upsertProductRows(storeId, products);
+  });
   if (!ok) {
+    db.stores[storeId].products = previous;
     return res.status(503).json({ error: 'تعذّر حفظ المنتجات، يرجى المحاولة مرة أخرى' });
   }
   broadcastStoreUpdate(storeId);
@@ -1041,9 +1170,10 @@ const commitProducts = async (
   res: express.Response,
   storeId: string,
   previous: ProductRecord[],
+  supabaseOp: () => Promise<void>,
   payload: Record<string, unknown>
 ) => {
-  const ok = await persistStoreNow(storeId);
+  const ok = await persistProductChange(supabaseOp);
   if (!ok) {
     db.stores[storeId].products = previous; // keep memory consistent with storage
     return res.status(503).json({ error: 'تعذّر حفظ التغييرات، يرجى المحاولة مرة أخرى' });
@@ -1071,7 +1201,7 @@ app.post('/api/admin/products/item', authenticateToken, async (req, res) => {
     next.push(product);
   }
   store.products = next;
-  await commitProducts(res, storeId, previous, { product });
+  await commitProducts(res, storeId, previous, () => upsertProductRows(storeId, [product]), { product });
 });
 
 // Update one product by id.
@@ -1090,7 +1220,7 @@ app.patch('/api/admin/products/item/:id', authenticateToken, async (req, res) =>
   const next = [...previous];
   next[idx] = merged;
   store.products = next;
-  await commitProducts(res, storeId, previous, { product: merged });
+  await commitProducts(res, storeId, previous, () => upsertProductRows(storeId, [merged]), { product: merged });
 });
 
 // Delete one product by id.
@@ -1104,7 +1234,7 @@ app.delete('/api/admin/products/item/:id', authenticateToken, async (req, res) =
   if (next.length === previous.length) return res.status(404).json({ error: 'Product not found' });
 
   store.products = next;
-  await commitProducts(res, storeId, previous, {});
+  await commitProducts(res, storeId, previous, () => deleteProductRow(req.params.id), {});
 });
 
 // Bulk import: merge a list by barcode (update existing, add new) without
@@ -1119,20 +1249,24 @@ app.post('/api/admin/products/import', authenticateToken, async (req, res) => {
 
   const previous = store.products || [];
   const next = [...previous];
+  const changed: ProductRecord[] = [];
   let added = 0;
   let updated = 0;
   for (const p of incoming) {
     const idx = next.findIndex((x) => x.barcode && x.barcode === p.barcode);
     if (idx >= 0) {
-      next[idx] = { ...p, id: next[idx].id };
+      const row = { ...p, id: next[idx].id };
+      next[idx] = row;
+      changed.push(row);
       updated += 1;
     } else {
       next.push(p);
+      changed.push(p);
       added += 1;
     }
   }
   store.products = next;
-  await commitProducts(res, storeId, previous, { added, updated, count: next.length });
+  await commitProducts(res, storeId, previous, () => upsertProductRows(storeId, changed), { added, updated, count: next.length });
 });
 
 // Clear all products for the store.
@@ -1143,7 +1277,7 @@ app.delete('/api/admin/products', authenticateToken, async (req, res) => {
 
   const previous = store.products || [];
   store.products = [];
-  await commitProducts(res, storeId, previous, {});
+  await commitProducts(res, storeId, previous, () => deleteProductsForStore(storeId), {});
 });
 
 
