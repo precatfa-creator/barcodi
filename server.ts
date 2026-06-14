@@ -1031,6 +1031,121 @@ app.post('/api/admin/products', authenticateToken, async (req, res) => {
   res.json({ success: true, count: products.length });
 });
 
+// --- Row-level product writes ---------------------------------------------
+// Each endpoint merges a single change into the server's authoritative product
+// list, instead of the client replacing the whole array. This eliminates the
+// last-write-wins clobbering that happened when two tabs/admins each POSTed
+// their full (stale) list. Persistence reuses persistStoreNow (awaited +
+// confirmed), and the previous list is restored if the write doesn't land.
+const commitProducts = async (
+  res: express.Response,
+  storeId: string,
+  previous: ProductRecord[],
+  payload: Record<string, unknown>
+) => {
+  const ok = await persistStoreNow(storeId);
+  if (!ok) {
+    db.stores[storeId].products = previous; // keep memory consistent with storage
+    return res.status(503).json({ error: 'تعذّر حفظ التغييرات، يرجى المحاولة مرة أخرى' });
+  }
+  broadcastStoreUpdate(storeId);
+  res.json({ success: true, ...payload });
+};
+
+// Add one product (upserts by barcode within the store).
+app.post('/api/admin/products/item', authenticateToken, async (req, res) => {
+  const storeId = (req as any).user.storeId;
+  const store = db.stores[storeId];
+  if (!store) return res.status(404).json({ error: 'Not found' });
+
+  const product = normalizeProduct(req.body, 0);
+  if (!product) return res.status(400).json({ error: 'Invalid product' });
+
+  const previous = store.products || [];
+  const next = [...previous];
+  const idx = next.findIndex((p) => p.barcode && p.barcode === product.barcode);
+  if (idx >= 0) {
+    product.id = next[idx].id;
+    next[idx] = product;
+  } else {
+    next.push(product);
+  }
+  store.products = next;
+  await commitProducts(res, storeId, previous, { product });
+});
+
+// Update one product by id.
+app.patch('/api/admin/products/item/:id', authenticateToken, async (req, res) => {
+  const storeId = (req as any).user.storeId;
+  const store = db.stores[storeId];
+  if (!store) return res.status(404).json({ error: 'Not found' });
+
+  const previous = store.products || [];
+  const idx = previous.findIndex((p) => p.id === req.params.id);
+  if (idx < 0) return res.status(404).json({ error: 'Product not found' });
+
+  const merged = normalizeProduct({ ...previous[idx], ...req.body, id: req.params.id }, 0);
+  if (!merged) return res.status(400).json({ error: 'Invalid product' });
+
+  const next = [...previous];
+  next[idx] = merged;
+  store.products = next;
+  await commitProducts(res, storeId, previous, { product: merged });
+});
+
+// Delete one product by id.
+app.delete('/api/admin/products/item/:id', authenticateToken, async (req, res) => {
+  const storeId = (req as any).user.storeId;
+  const store = db.stores[storeId];
+  if (!store) return res.status(404).json({ error: 'Not found' });
+
+  const previous = store.products || [];
+  const next = previous.filter((p) => p.id !== req.params.id);
+  if (next.length === previous.length) return res.status(404).json({ error: 'Product not found' });
+
+  store.products = next;
+  await commitProducts(res, storeId, previous, {});
+});
+
+// Bulk import: merge a list by barcode (update existing, add new) without
+// dropping products the uploaded file didn't include.
+app.post('/api/admin/products/import', authenticateToken, async (req, res) => {
+  const storeId = (req as any).user.storeId;
+  const store = db.stores[storeId];
+  if (!store) return res.status(404).json({ error: 'Not found' });
+
+  const incoming = normalizeProducts(req.body.products);
+  if (!incoming) return res.status(400).json({ error: 'Invalid products format' });
+
+  const previous = store.products || [];
+  const next = [...previous];
+  let added = 0;
+  let updated = 0;
+  for (const p of incoming) {
+    const idx = next.findIndex((x) => x.barcode && x.barcode === p.barcode);
+    if (idx >= 0) {
+      next[idx] = { ...p, id: next[idx].id };
+      updated += 1;
+    } else {
+      next.push(p);
+      added += 1;
+    }
+  }
+  store.products = next;
+  await commitProducts(res, storeId, previous, { added, updated, count: next.length });
+});
+
+// Clear all products for the store.
+app.delete('/api/admin/products', authenticateToken, async (req, res) => {
+  const storeId = (req as any).user.storeId;
+  const store = db.stores[storeId];
+  if (!store) return res.status(404).json({ error: 'Not found' });
+
+  const previous = store.products || [];
+  store.products = [];
+  await commitProducts(res, storeId, previous, {});
+});
+
 
 async function startServer() {
   await databaseReady;

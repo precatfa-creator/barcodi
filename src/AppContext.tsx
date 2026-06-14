@@ -9,6 +9,11 @@ interface AppContextProps {
   loadStoreData: (storeId: string) => Promise<void>;
   subscribeToStoreData: (storeId: string) => () => void;
   registerVisit: (storeId: string) => void;
+  addProduct: (product: Partial<Product>) => Promise<boolean>;
+  updateProduct: (id: string, fields: Partial<Product>) => Promise<boolean>;
+  deleteProduct: (id: string) => Promise<boolean>;
+  clearProducts: () => Promise<boolean>;
+  importProducts: (products: Product[]) => Promise<{ added: number; updated: number } | null>;
   loading: boolean;
   storeSuspended: boolean;
 }
@@ -166,8 +171,102 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const authHeaders = () => ({
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${localStorage.getItem('adminToken')}`,
+  });
+
+  const warnSaveFailed = () => {
+    if (typeof window !== 'undefined') {
+      window.alert('تعذّر حفظ التغييرات على الخادم. لم يتم الحفظ، يرجى المحاولة مرة أخرى.');
+    }
+  };
+
+  // Row-level product writes: each call changes one product (or merges an
+  // import) on the server, which holds the authoritative list — so concurrent
+  // edits from another tab/device no longer overwrite each other.
+  const addProduct = useCallback(async (product: Partial<Product>): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/admin/products/item', { method: 'POST', headers: authHeaders(), body: JSON.stringify(product) });
+      if (!res.ok) throw new Error('save failed');
+      const { product: saved } = await res.json();
+      setProductsState((prev) => {
+        const idx = prev.findIndex((p) => p.id === saved.id || (saved.barcode && p.barcode === saved.barcode));
+        if (idx >= 0) {
+          const copy = [...prev];
+          copy[idx] = saved;
+          return copy;
+        }
+        return [...prev, saved];
+      });
+      return true;
+    } catch {
+      warnSaveFailed();
+      return false;
+    }
+  }, []);
+
+  const updateProduct = useCallback(async (id: string, fields: Partial<Product>): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/admin/products/item/${encodeURIComponent(id)}`, { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(fields) });
+      if (!res.ok) throw new Error('save failed');
+      const { product: saved } = await res.json();
+      setProductsState((prev) => prev.map((p) => (p.id === id ? saved : p)));
+      return true;
+    } catch {
+      warnSaveFailed();
+      return false;
+    }
+  }, []);
+
+  const deleteProduct = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/admin/products/item/${encodeURIComponent(id)}`, { method: 'DELETE', headers: authHeaders() });
+      if (!res.ok) throw new Error('delete failed');
+      setProductsState((prev) => prev.filter((p) => p.id !== id));
+      return true;
+    } catch {
+      warnSaveFailed();
+      return false;
+    }
+  }, []);
+
+  const clearProducts = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/admin/products', { method: 'DELETE', headers: authHeaders() });
+      if (!res.ok) throw new Error('clear failed');
+      setProductsState([]);
+      return true;
+    } catch {
+      warnSaveFailed();
+      return false;
+    }
+  }, []);
+
+  const importProducts = useCallback(async (incoming: Product[]): Promise<{ added: number; updated: number } | null> => {
+    try {
+      const res = await fetch('/api/admin/products/import', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ products: incoming }) });
+      if (!res.ok) throw new Error('import failed');
+      const data = await res.json();
+      // Mirror the server's merge (upsert by barcode) into local state.
+      setProductsState((prev) => {
+        const next = [...prev];
+        for (const p of incoming) {
+          const idx = next.findIndex((x) => x.barcode && x.barcode === p.barcode);
+          if (idx >= 0) next[idx] = { ...p, id: next[idx].id };
+          else next.push(p);
+        }
+        return next;
+      });
+      return { added: data.added || 0, updated: data.updated || 0 };
+    } catch {
+      warnSaveFailed();
+      return null;
+    }
+  }, []);
+
   return (
-    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, subscribeToStoreData, registerVisit, loading, storeSuspended }}>
+    <AppContext.Provider value={{ products, setProducts, storeSettings, setStoreSettings, loadStoreData, subscribeToStoreData, registerVisit, addProduct, updateProduct, deleteProduct, clearProducts, importProducts, loading, storeSuspended }}>
       {children}
     </AppContext.Provider>
   );
