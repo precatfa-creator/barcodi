@@ -310,6 +310,12 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     },
   });
   console.log("Supabase database configured.");
+} else if (isProduction) {
+  console.warn(
+    '⚠️  DATA LOSS RISK: Supabase is NOT configured in production. Data is kept only ' +
+    'in a local file, which is wiped on every redeploy/restart on most hosts (e.g. Render). ' +
+    'Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to persist data durably.'
+  );
 } else {
   console.log("Supabase credentials not configured; running with local file storage only.");
 }
@@ -476,6 +482,42 @@ const saveStoreToDatabase = async (storeId: string) => {
   if (!supabase) return;
   pendingSupabaseStoreIds.add(storeId);
   scheduleSupabaseFlush();
+};
+
+// Persist a single store immediately and report whether it succeeded. Used by
+// user-facing writes so a request only returns OK once the data is durably
+// stored — no more fire-and-forget acks that vanish if the instance restarts
+// before the debounced flush runs. Falls back to the retry queue on failure so
+// the write is never silently dropped.
+const persistStoreNow = async (storeId: string): Promise<boolean> => {
+  // Best-effort local mirror (cheap durability net within an instance lifetime).
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  } catch {
+    // ignore (e.g. read-only filesystem)
+  }
+
+  if (!supabase) return true;
+
+  const store = db.stores[storeId];
+  try {
+    if (store) {
+      const { error } = await supabase.from('stores').upsert([storeToSupabaseRow(store)], { onConflict: 'id' });
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('stores').delete().eq('id', storeId);
+      if (error) throw error;
+    }
+    pendingSupabaseStoreIds.delete(storeId);
+    markSupabaseSuccess();
+    return true;
+  } catch (err) {
+    // Keep the write in the retry queue rather than losing it.
+    pendingSupabaseStoreIds.add(storeId);
+    scheduleSupabaseFlush();
+    markSupabaseFailure(`Immediate persist failed for store ${storeId}`, err);
+    return false;
+  }
 };
 
 const publishAllStoresToDatabase = async () => {
@@ -672,7 +714,7 @@ const publicApiLimiter = createRateLimiter({
 });
 
 // API: Register Store
-app.post('/api/admin/register', authenticateToken, requireCommander, (req, res) => {
+app.post('/api/admin/register', authenticateToken, requireCommander, async (req, res) => {
   const username = validateUsername(req.body.username);
   const password = validatePasswordInput(req.body.password);
   const storeName = sanitizeText(req.body.storeName, 120);
@@ -696,8 +738,11 @@ app.post('/api/admin/register', authenticateToken, requireCommander, (req, res) 
     storeLogo: "",
     products: []
   };
-  saveDbIfChanged();
-  saveStoreToDatabase(storeId);
+  const ok = await persistStoreNow(storeId);
+  if (!ok) {
+    delete db.stores[storeId];
+    return res.status(503).json({ error: 'تعذّر إنشاء المتجر، يرجى المحاولة مرة أخرى' });
+  }
 
   res.status(201).json({ storeId });
 });
@@ -855,8 +900,10 @@ app.post('/api/admin/stores/:id/suspend', authenticateToken, requireCommander, a
   if (!store) return res.status(404).json({ error: 'Store not found' });
 
   store.suspended = Boolean(req.body?.suspended);
-  saveDbIfChanged();
-  await saveStoreToDatabase(storeId);
+  const ok = await persistStoreNow(storeId);
+  if (!ok) {
+    return res.status(503).json({ error: 'تعذّر تحديث حالة المتجر، يرجى المحاولة مرة أخرى' });
+  }
   // Push the new status so any customers currently in the store react live.
   broadcastStoreUpdate(storeId);
 
@@ -864,7 +911,7 @@ app.post('/api/admin/stores/:id/suspend', authenticateToken, requireCommander, a
 });
 
 // API: Delete a store (Super Admin only)
-app.delete('/api/admin/stores/:id', authenticateToken, requireCommander, (req, res) => {
+app.delete('/api/admin/stores/:id', authenticateToken, requireCommander, async (req, res) => {
   const user = (req as any).user;
   const idToRemove = req.params.id;
   // Prevent deleting oneself
@@ -873,9 +920,14 @@ app.delete('/api/admin/stores/:id', authenticateToken, requireCommander, (req, r
   }
 
   if (db.stores[idToRemove]) {
+    const removed = db.stores[idToRemove];
     delete db.stores[idToRemove];
-    saveDbIfChanged();
-    saveStoreToDatabase(idToRemove);
+    const ok = await persistStoreNow(idToRemove);
+    if (!ok) {
+      // Restore so state stays consistent with storage.
+      db.stores[idToRemove] = removed;
+      return res.status(503).json({ error: 'تعذّر حذف المتجر، يرجى المحاولة مرة أخرى' });
+    }
     broadcastStoreDeleted(idToRemove);
     res.json({ success: true });
   } else {
@@ -899,8 +951,10 @@ app.post('/api/admin/stores/:id/reset-password', authenticateToken, requireComma
 
   const newPassword = validatePasswordInput(req.body?.password) || generateTemporaryPassword();
   store.passwordHash = hashPassword(newPassword);
-  saveDbIfChanged();
-  await saveStoreToDatabase(storeId);
+  const ok = await persistStoreNow(storeId);
+  if (!ok) {
+    return res.status(503).json({ error: 'تعذّر حفظ كلمة المرور الجديدة، يرجى المحاولة مرة أخرى' });
+  }
 
   res.json({
     success: true,
@@ -926,13 +980,15 @@ app.post('/api/admin/change-password', authenticateToken, async (req, res) => {
   }
 
   store.passwordHash = hashPassword(newPassword);
-  saveDbIfChanged();
-  await saveStoreToDatabase(storeId);
+  const ok = await persistStoreNow(storeId);
+  if (!ok) {
+    return res.status(503).json({ error: 'تعذّر حفظ كلمة المرور، يرجى المحاولة مرة أخرى' });
+  }
   res.json({ success: true });
 });
 
 // API: Update Store Info (Admin)
-app.put('/api/admin/store', authenticateToken, (req, res) => {
+app.put('/api/admin/store', authenticateToken, async (req, res) => {
   const storeId = (req as any).user.storeId;
   if (!db.stores[storeId]) return res.status(404).json({ error: 'Not found' });
 
@@ -948,27 +1004,31 @@ app.put('/api/admin/store', authenticateToken, (req, res) => {
 
   if (storeName !== undefined) db.stores[storeId].storeName = storeName;
   if (storeLogo !== undefined) db.stores[storeId].storeLogo = storeLogo;
-  saveDbIfChanged();
-  saveStoreToDatabase(storeId);
+  const ok = await persistStoreNow(storeId);
+  if (!ok) {
+    return res.status(503).json({ error: 'تعذّر حفظ الإعدادات، يرجى المحاولة مرة أخرى' });
+  }
   broadcastStoreUpdate(storeId);
   res.json({ success: true, storeName: db.stores[storeId].storeName, storeLogo: db.stores[storeId].storeLogo });
 });
 
 // API: Upload Products (Admin)
-app.post('/api/admin/products', authenticateToken, (req, res) => {
+app.post('/api/admin/products', authenticateToken, async (req, res) => {
   const storeId = (req as any).user.storeId;
   if (!db.stores[storeId]) return res.status(404).json({ error: 'Not found' });
 
   const products = normalizeProducts(req.body.products);
-  if (products) {
-    db.stores[storeId].products = products;
-    saveDbIfChanged();
-    saveStoreToDatabase(storeId);
-    broadcastStoreUpdate(storeId);
-    res.json({ success: true, count: products.length });
-  } else {
-    res.status(400).json({ error: 'Invalid products format' });
+  if (!products) {
+    return res.status(400).json({ error: 'Invalid products format' });
   }
+
+  db.stores[storeId].products = products;
+  const ok = await persistStoreNow(storeId);
+  if (!ok) {
+    return res.status(503).json({ error: 'تعذّر حفظ المنتجات، يرجى المحاولة مرة أخرى' });
+  }
+  broadcastStoreUpdate(storeId);
+  res.json({ success: true, count: products.length });
 });
 
 
