@@ -1,27 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import type { LucideIcon } from 'lucide-react';
 import {
   Store,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
   QrCode,
-  UploadCloud,
   Smartphone,
   MessageCircle,
   Check,
-  HelpCircle,
-  Sparkles,
   ShoppingCart,
-  ArrowLeft,
-  DollarSign,
-  Layers,
-  ShieldCheck,
-  Zap,
-  Flame,
-  XCircle,
-  TrendingUp,
-  Award,
+  ArrowDown,
+  Wallet,
+  PackageCheck,
   Camera,
+  Plus,
+  Minus,
+  Sparkles,
   Infinity as InfinityIcon,
-  Timer
+  Timer,
+  FileSpreadsheet,
+  SlidersHorizontal,
+  Zap,
+  FlipHorizontal,
+  ChefHat,
+  Barcode,
+  Flame,
 } from 'lucide-react';
 
 // Reveal elements with the `reveal` class as they scroll into view. Pure
@@ -53,613 +58,950 @@ function useScrollReveal() {
   }, []);
 }
 
+const WHATSAPP_NUMBER = '218945953967';
+
+function whatsappLink(message: string) {
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+}
+
+// Small uppercase label with a brand dot — the recurring section eyebrow.
+function Eyebrow({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3.5 py-1.5 text-[11px] font-bold tracking-wide text-gray-600">
+      <span className="w-1.5 h-1.5 rounded-full bg-gradient-to-tr from-primary-dark to-primary-light" />
+      {children}
+    </span>
+  );
+}
+
+// Slim phone chassis shared by the hero demo and the in-app screens gallery.
+function PhoneFrame({ children, label }: { children: ReactNode; label?: string }) {
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-[300px] max-w-full rounded-[2.6rem] bg-gray-950 p-2.5 shadow-[0_30px_70px_-20px_rgba(16,42,46,0.45)]">
+        <div className="rounded-[2rem] overflow-hidden bg-[#f3f6f2] relative">
+          {/* Speaker notch */}
+          <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-16 h-1.5 rounded-full bg-gray-900/80 z-20" />
+          {children}
+        </div>
+      </div>
+      {label && <span className="text-xs font-bold text-gray-500">{label}</span>}
+    </div>
+  );
+}
+
+// The signature hero moment: a phone endlessly looping the real product flow —
+// laser scan over a Nutella barcode, then the price card with the Pro plan's
+// AI recipe suggestions. Two phases driven by a simple timer.
+function LiveScanDemo() {
+  const [phase, setPhase] = useState<'scanning' | 'found'>('scanning');
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setPhase('found');
+      return;
+    }
+    let mounted = true;
+    let timer: number;
+    const next = (current: 'scanning' | 'found') => {
+      if (!mounted) return;
+      setPhase(current);
+      timer = window.setTimeout(() => next(current === 'scanning' ? 'found' : 'scanning'), current === 'scanning' ? 3000 : 4200);
+    };
+    next('scanning');
+    return () => {
+      mounted = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  return (
+    <PhoneFrame>
+      <div className="pt-8 pb-5 px-4 min-h-[480px] bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col gap-3" dir="rtl">
+        {/* Store header, as the shopper sees it */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl bg-primary-dark text-white flex items-center justify-center">
+              <Store className="w-3.5 h-3.5" />
+            </div>
+            <span className="text-[11px] font-bold text-gray-800">سوق النخبة — فرع المدينة</span>
+          </div>
+          <span className="text-[9px] font-bold bg-white text-primary-dark border border-primary-light/40 px-2 py-0.5 rounded-full">مباشر</span>
+        </div>
+
+        {phase === 'scanning' ? (
+          /* Full-bleed camera view, exactly like the real scanner screen */
+          <div className="flex-1 -mx-4 -mb-5 relative bg-gray-950 overflow-hidden animate-fade-in">
+            {/* Simulated shelf blur behind the reticle */}
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_35%_30%,#3d3428_0%,#171a16_60%)]" />
+            {/* Barcode being scanned */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg px-3 py-2 flex flex-col items-center gap-1">
+              <div className="flex items-end gap-[2px] h-8">
+                {[3, 1, 2, 1, 3, 2, 1, 3, 1, 2, 3, 1, 2, 1, 3, 2, 1, 2].map((w, i) => (
+                  <span key={i} className="bg-gray-900 h-full" style={{ width: `${w}px` }} />
+                ))}
+              </div>
+              <span className="text-[8px] font-mono text-gray-700 tracking-widest">8000500179864</span>
+            </div>
+            {/* Reticle + laser, straight from the real scanner */}
+            <div className="absolute left-[9%] right-[9%] top-1/2 h-[34%] -translate-y-1/2 rounded-2xl border-2 border-primary-light/90 shadow-[0_0_0_999px_rgba(0,0,0,0.45)] pointer-events-none" />
+            <div className="absolute left-0 right-0 h-[3px] bg-emerald-400 shadow-[0_0_20px_#10b981,0_0_8px_#10b981] animate-laser pointer-events-none z-10" style={{ top: '0%' }} />
+            <p className="relative z-10 mt-5 px-4 text-[10px] text-white/90 text-center font-medium">وجّه الباركود داخل الإطار الأخضر</p>
+            <div className="absolute bottom-3 left-3 right-3 z-10 bg-black/80 backdrop-blur-md px-3 py-2 rounded-xl text-[8px] font-bold text-white flex items-center justify-center gap-1.5 border border-white/10">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              المسح التلقائي مفعّل — جارٍ التعرّف على المنتج
+              <Camera className="w-3 h-3 text-white/70" />
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col justify-center gap-2.5 animate-scale-up">
+            {/* Product card, mirroring the in-app layout */}
+            <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-white p-4 shadow-[0_12px_40px_-5px_rgba(53,133,142,0.18)] flex flex-col items-center text-center">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-pale to-primary-light border-[3px] border-white flex items-center justify-center text-2xl mb-2 shadow-sm">
+                🍫
+              </div>
+              <h4 className="text-[13px] font-black text-gray-900 leading-snug">نوتيلا — كريمة البندق بالكاكاو ٣٥٠غ</h4>
+              <span className="text-[8px] font-mono text-gray-400 bg-white/60 px-2 py-0.5 rounded-md mt-1">باركود: 8000500179864</span>
+              <div className="mt-2.5 flex items-baseline gap-1">
+                <span className="text-2xl font-black text-primary-dark font-mono tracking-tight">12.50</span>
+                <span className="text-[11px] font-black text-gray-800">د.ل</span>
+              </div>
+              <button className="mt-3 w-full bg-primary-dark text-white text-[10px] font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5">
+                <ShoppingCart className="w-3.5 h-3.5" />
+                أضِف إلى السلة
+              </button>
+            </div>
+
+            {/* AI suggestion — the Pro add-on, shown in its natural habitat */}
+            <div className="rounded-2xl border border-primary-light/50 bg-gradient-to-l from-primary-pale/80 to-white p-3">
+              <div className="flex items-center gap-1.5 mb-2">
+                <Sparkles className="w-3.5 h-3.5 text-primary-dark" />
+                <span className="text-[10px] font-black text-primary-dark">اقتراح ذكي — وصفات بهذا المنتج</span>
+                <span className="mr-auto text-[8px] font-bold bg-primary-dark text-white px-1.5 py-0.5 rounded-md">إضافة احترافية</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {['كريب محشو بالبندق', 'تشيز كيك بارد', 'ميلك شيك بالشوكولاتة'].map((r) => (
+                  <span key={r} className="inline-flex items-center gap-1 bg-white border border-gray-200 text-gray-700 text-[9px] font-bold px-2 py-1 rounded-full">
+                    <ChefHat className="w-3 h-3 text-primary-dark" />
+                    {r}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </PhoneFrame>
+  );
+}
+
+// Floating page scroller — jump to top / bottom with smooth scrolling.
+function ScrollArrows() {
+  const [atTop, setAtTop] = useState(true);
+  const [atBottom, setAtBottom] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      setAtTop(y < 320);
+      setAtBottom(y + window.innerHeight >= document.documentElement.scrollHeight - 160);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const btn =
+    'w-11 h-11 rounded-full border border-gray-200 bg-white/90 backdrop-blur-md text-gray-700 shadow-[0_10px_30px_rgba(0,0,0,0.12)] flex items-center justify-center hover:bg-primary-dark hover:border-primary-dark hover:text-white transition-all duration-300';
+
+  return (
+    <div className="fixed bottom-5 left-5 z-50 flex flex-col gap-2">
+      <button
+        type="button"
+        aria-label="الانتقال إلى أعلى الصفحة"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className={`${btn} ${atTop ? 'opacity-0 translate-y-2 pointer-events-none' : 'opacity-100 translate-y-0'}`}
+      >
+        <ArrowUp className="w-5 h-5" />
+      </button>
+      <button
+        type="button"
+        aria-label="الانتقال إلى أسفل الصفحة"
+        onClick={() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })}
+        className={`${btn} ${atBottom ? 'opacity-0 -translate-y-2 pointer-events-none' : 'opacity-100 translate-y-0'}`}
+      >
+        <ArrowDown className="w-5 h-5" />
+      </button>
+    </div>
+  );
+}
+
+type Benefit = {
+  icon: LucideIcon;
+  tile: string;
+  iconClass: string;
+  title: string;
+  desc: string;
+};
+
+// "Why Barcodi" showcase — tab list drives a spotlight card. Auto-advances
+// every 5s, pauses on hover, arrows + dots for manual navigation.
+function WhyShowcase({ items }: { items: Benefit[] }) {
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (paused || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const id = window.setInterval(() => setActive((a) => (a + 1) % items.length), 5000);
+    return () => window.clearInterval(id);
+  }, [paused, items.length]);
+
+  const item = items[active];
+  const goTo = (i: number) => setActive((i + items.length) % items.length);
+
+  return (
+    <div
+      className="grid lg:grid-cols-[0.9fr_1.35fr] gap-4 lg:gap-6 items-stretch"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {/* Tab rail — vertical on desktop, swipeable chips on mobile */}
+      <div className="flex lg:flex-col gap-2.5 overflow-x-auto lg:overflow-visible -mx-6 px-6 lg:mx-0 lg:px-0 pb-2 lg:pb-0" role="tablist" aria-label="مزايا باركودي">
+        {items.map((b, i) => {
+          const isActive = i === active;
+          return (
+            <button
+              key={b.title}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => goTo(i)}
+              className={`relative shrink-0 lg:shrink lg:w-full text-right rounded-2xl border px-4 py-3.5 overflow-hidden transition-all duration-300 ${
+                isActive
+                  ? 'border-primary-dark/25 bg-white shadow-[0_14px_36px_rgba(53,133,142,0.14)]'
+                  : 'border-gray-200 bg-white/60 hover:bg-white hover:border-gray-300'
+              }`}
+            >
+              <span className="flex items-center gap-3">
+                <span
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                    isActive ? 'bg-primary-dark text-white' : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  <b.icon className="w-4 h-4" />
+                </span>
+                <span className={`text-sm font-black whitespace-nowrap lg:whitespace-normal ${isActive ? 'text-gray-950' : 'text-gray-500'}`}>
+                  {b.title}
+                </span>
+              </span>
+              {isActive && !paused && (
+                <span className="absolute bottom-0 right-0 h-[3px] rounded-full bg-gradient-to-l from-primary-dark to-primary-light animate-progress" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Spotlight card */}
+      <div className="relative rounded-[2rem] border border-gray-200 bg-white overflow-hidden shadow-[0_24px_60px_-20px_rgba(16,42,46,0.18)]">
+        <div key={active} className="h-full flex flex-col animate-fade-in-up">
+          <div className={`relative bg-gradient-to-br ${item.tile} px-8 pt-10 pb-8`}>
+            <span className="absolute -top-4 left-4 text-[110px] leading-none font-black text-gray-950/5 font-display select-none" aria-hidden="true">
+              {`0${active + 1}`}
+            </span>
+            <div className={`w-16 h-16 rounded-2xl ${item.iconClass} flex items-center justify-center shadow-sm`}>
+              <item.icon className="w-8 h-8" />
+            </div>
+          </div>
+          <div className="flex-1 flex flex-col p-8 pt-6 text-right">
+            <h3 className="text-2xl md:text-3xl font-black text-gray-950 font-display leading-tight">{item.title}</h3>
+            <p className="text-sm md:text-base text-gray-500 font-medium leading-relaxed mt-3.5">{item.desc}</p>
+
+            <div className="mt-auto pt-8 flex items-center justify-between">
+              <div className="flex items-center gap-1.5" aria-hidden="true">
+                {items.map((b, i) => (
+                  <button
+                    key={b.title}
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => goTo(i)}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      i === active ? 'w-7 bg-primary-dark' : 'w-2 bg-gray-200 hover:bg-gray-300'
+                    }`}
+                  />
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="الميزة السابقة"
+                  onClick={() => goTo(active - 1)}
+                  className="w-10 h-10 rounded-full border border-gray-200 bg-white text-gray-600 flex items-center justify-center hover:border-primary-dark hover:text-primary-dark transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="الميزة التالية"
+                  onClick={() => goTo(active + 1)}
+                  className="w-10 h-10 rounded-full border border-gray-200 bg-white text-gray-600 flex items-center justify-center hover:border-primary-dark hover:text-primary-dark transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LandingPage() {
-  const [activeFaq, setActiveFaq] = useState<number | null>(null);
+  const [activeFaq, setActiveFaq] = useState<number | null>(0);
   useScrollReveal();
 
   const heroStats = [
-    { icon: DollarSign, value: '0$', label: 'تكلفة أجهزة قارئ' },
-    { icon: Timer, value: 'ثانية', label: 'لظهور السعر' },
-    { icon: InfinityIcon, value: 'لا محدود', label: 'عدد الأصناف' },
-    { icon: Smartphone, value: 'بدون تحميل', label: 'يعمل من الكاميرا' },
+    { icon: Wallet, value: 'صفر', label: 'تكلفة أجهزة القراءة' },
+    { icon: Timer, value: 'لحظة', label: 'لظهور السعر' },
+    { icon: InfinityIcon, value: 'بلا حدود', label: 'عدد الأصناف' },
+    { icon: Smartphone, value: 'بلا تثبيت', label: 'يعمل من كاميرا الهاتف' },
   ];
 
   const howItWorks = [
     {
       icon: QrCode,
       title: 'امسح رمز المتجر',
-      desc: 'يوجّه الزبون كاميرا هاتفه إلى كود QR المطبوع على الرفوف أو السلال، فيُفتح متجرك فوراً بدون تحميل أي تطبيق.',
+      desc: 'يوجّه العميل كاميرا هاتفه إلى رمز QR المطبوع على الرفوف أو عربات التسوّق، فيُفتح متجرك فوراً دون تثبيت أي تطبيق.',
     },
     {
       icon: Camera,
-      title: 'وجّه الكاميرا للمنتج',
-      desc: 'يصوّب الكاميرا نحو باركود أي صنف، ليقرأه النظام في لحظة ويعرض الاسم والسعر والمواصفات بدقة.',
+      title: 'وجّه الكاميرا نحو المنتج',
+      desc: 'يصوّب الكاميرا نحو باركود أي صنف، فيقرأه النظام في لحظة ويعرض الاسم والسعر والمواصفات بدقة.',
     },
     {
       icon: ShoppingCart,
-      title: 'أضف للسلة واحسب',
-      desc: 'يضيف الأصناف لسلة ذكية تحسب الإجمالي التقديري فوراً، فيتسوّق بثقة ويصل للكاشير بلا مفاجآت.',
+      title: 'أضِف إلى السلة واحسب',
+      desc: 'يضيف الأصناف إلى سلة ذكية تحسب الإجمالي التقديري فوراً، فيتسوّق بثقة ويصل إلى الكاشير دون مفاجآت. وهذه ميزة اختيارية تفعّلها أو توقفها متى شئت.',
+    },
+  ];
+
+  // Ordered deliberately: economy → availability → no scatter → flexibility →
+  // spreadsheets. Drives the WhyShowcase spotlight slider.
+  const benefits: Benefit[] = [
+    {
+      icon: Wallet,
+      tile: 'from-emerald-50 to-teal-50',
+      iconClass: 'bg-emerald-100 text-emerald-700',
+      title: 'اقتصادي وموفّر',
+      desc: 'لا حاجة لشراء أجهزة قراءة باهظة أو مدّ كابلات وشبكات معقّدة وصيانتها. يوفّر متجرك آلاف الدنانير مستفيداً من هواتف يحملها عملاؤك أصلاً.',
+    },
+    {
+      icon: Smartphone,
+      tile: 'from-sky-50 to-indigo-50',
+      iconClass: 'bg-sky-100 text-sky-700',
+      title: 'متاح في كل مكان وزمان',
+      desc: 'قارئ الأسعار في يد كل عميل لا في زاوية بعيدة من المتجر. لا طوابير أمام جهاز واحد، ولا جهاز معطّل يوقف الخدمة؛ فكل هاتف هو نقطة استعلام مستقلة.',
+    },
+    {
+      icon: PackageCheck,
+      tile: 'from-rose-50 to-orange-50',
+      iconClass: 'bg-rose-100 text-rose-600',
+      title: 'لا تبعثر للمنتجات',
+      desc: 'يستعلم العميل عن السعر وهو أمام الرفّ مباشرة، فلا يحمل الصنف بعيداً ولا يتركه في مكان خاطئ. تنتهي فوضى الرفوف نهائياً.',
+    },
+    {
+      icon: SlidersHorizontal,
+      tile: 'from-violet-50 to-fuchsia-50',
+      iconClass: 'bg-violet-100 text-violet-600',
+      title: 'مرونة كاملة',
+      desc: 'حدّث الأسعار في أي لحظة فتظهر للعملاء فوراً، وبدّل باقتك أو خصّص واجهة متجرك بشعارك وألوانك متى شئت.',
+    },
+    {
+      icon: FileSpreadsheet,
+      tile: 'from-amber-50 to-lime-50',
+      iconClass: 'bg-amber-100 text-amber-600',
+      title: 'إكسل أو جداول بيانات Google',
+      desc: 'أدرِج آلاف الأصناف في ملف إكسل أو جداول بيانات Google وارفعه، فيقرأه النظام ويتجاوز الباركودات المكررة ويدمجها تلقائياً بضغطة واحدة.',
+    },
+  ];
+
+  const aiFeatures = [
+    {
+      icon: ChefHat,
+      title: 'وصفات فورية عند المسح',
+      desc: 'يمسح العميل عبوة نوتيلا فيعرض له النظام وصفات شهية تدخل فيها؛ فيشتري مكوّناتها كاملة من متجرك.',
+    },
+    {
+      icon: Sparkles,
+      title: 'اقتراح منتجات مكمّلة',
+      desc: 'مع كل صنف يُمسح تظهر منتجات ترافقه عادةً — شاي مع السكر، ومعكرونة مع الصلصة — فترتفع قيمة السلة.',
+    },
+    {
+      icon: Zap,
+      title: 'تنبيهات عروض لحظية',
+      desc: 'يرى العميل عرض المتجر على الصنف الذي بين يديه لحظة مسحه، فيتّخذ قرار الشراء في مكانه.',
     },
   ];
 
   const pricePlans = [
     {
-      name: "الخطة التجريبية",
-      badge: "ابدأ مجاناً",
-      price: "0",
-      period: "فاتورة مدى الحياة",
-      description: "الحل الأمثل لتجربة النظام واختبار فاعليته في متجرك الصغير أو البقالة القريبة.",
+      name: 'باقة الانطلاق',
+      badge: 'للمتاجر الصاعدة',
+      price: '499',
+      period: 'د.ل / شهرياً',
+      description: 'كل ما يحتاجه متجرك ليقدّم خدمة استعلام الأسعار الذاتية من اليوم الأول.',
       features: [
-        "حد أقصى 150 صنف مضاف",
-        "رمز QR مخصص للمتجر لطباعته",
-        "تعديل وتحديث الأسعار يدوياً",
-        "رفع قوائم المنتجات عبر ملف إكسل",
-        "سلة تصفح وحساب المجموع للعميل",
-        "دعم فني عبر البريد الإلكتروني"
+        'رمز QR مخصّص لمتجرك جاهز للطباعة',
+        'رفع المنتجات عبر إكسل أو جداول بيانات Google',
+        'سلة ذكية اختيارية — فعّلها أو أوقفها من لوحة التحكم',
+        'تحديث الأسعار في أي وقت',
+        'دعم فني عبر واتساب',
       ],
+      aiAddons: [] as string[],
       popular: false,
-      color: "from-blue-400 to-indigo-500",
-      buttonText: "ابدأ التجربة المجانية الآن",
-      whatsappMsg: "مرحباً، أرغب في تجربة الخطة المجانية لباركودي"
+      buttonText: 'ابدأ مع باقة الانطلاق',
+      whatsappMsg: 'مرحباً، أرغب في الاشتراك في باقة الانطلاق من باركودي',
     },
     {
-      name: "الخطة الاحترافية (النمو السريع)",
-      badge: "الأكثر طلباً",
-      price: "19",
-      period: "دولار / شهرياً",
-      description: "الباقة المثلى للسوبرماركت والمحلات المتوسطة التي تطمح لتقديم تجربة تسوق راقية.",
+      name: 'الباقة الاحترافية',
+      badge: 'للمتاجر الكبرى والفروع',
+      price: '699',
+      period: 'د.ل / شهرياً',
+      description: 'قدرات كاملة مع إضافات الذكاء الاصطناعي التي تحوّل كل عملية مسح إلى فرصة بيع.',
       features: [
-        "حد غير محدود للأصناف والمنتجات",
-        "شعار مخصص للمتجر مع تفاصيل الفروع",
-        "سلة ذكية تفاعلية مع حاسبة فورية",
-        "لوحة مراقبة وإحصاء عدد الزوار فورياً",
-        "تقنية الكاش الحركي لسرعة قراءة الباركود",
-        "تحديث ذكي فوري للمنتجات المستوردة",
-        "دعم فني متكامل عبر واتساب 24/7"
+        'شعار وهوية مخصّصة لمتجرك وفروعه',
+        'لوحة متابعة لحظية لعدد الزوار وسلوكهم',
+        'تحديث جماعي فوري للفهارس',
+        'أولوية معالجة على خوادم سريعة',
+        'دعم فني ذو أولوية على مدار الساعة',
+      ],
+      aiAddons: [
+        'اقتراحات ذكية: وصفات فورية عند مسح المنتج',
+        'اقتراح منتجات مكمّلة ترفع قيمة السلة',
+        'تنبيهات عروض لحظية أمام الرفّ',
       ],
       popular: true,
-      color: "from-emerald-400 to-teal-600",
-      buttonText: "اشترك الآن ووفّر الكلفة",
-      whatsappMsg: "مرحباً، أرغب في الاشتراك بالخطة الاحترافية لقارئ متجري"
+      buttonText: 'اشترك في الاحترافية',
+      whatsappMsg: 'مرحباً، أرغب في الاشتراك في الباقة الاحترافية من باركودي',
     },
-    {
-      name: "خطة الشبكات والممتلكات",
-      badge: "سرعة قصوى",
-      price: "39",
-      period: "دولار / شهرياً",
-      description: "باقة النخبة للهايبرماركت الكبيرة والمحلات ذات المبيعات والزوار الكثيفين.",
-      features: [
-        "كل مزايا الباقة الاحترافية والمدرجة",
-        "نظام تفويض الصلاحيات والإداريين",
-        "تحديث جماعي متعدد للفهارس بلحظات",
-        "تحليلات سلوكية تفصيلية لاهتمام الزوار",
-        "تخصيص كامل لألوان نظام القارئ",
-        "أولوية مطلقة في سيرفرات المعالجة السريعة",
-        "مدير حساب مخصص للمتجر لتقديم الاستشارات"
-      ],
-      popular: false,
-      color: "from-amber-400/80 to-orange-600",
-      buttonText: "انضم إلى باقة النخبة",
-      whatsappMsg: "مرحباً، أرغب في الاستفسار عن باقة النخبة والمحلات الكبيرة لقارئ متجري"
-    }
   ];
 
   const faqs = [
     {
-      q: "كيف يوفر التطبيق ميزانية المتجر مقارنة بالحلول التقليدية؟",
-      a: "في العادة، يضطر السوبرماركت لشراء وتثبيت أجهزة قارئ أسعار ميكانيكية وربطها بالشبكة السلكية وتوفير خادم محلي لها، وهي تكلفة تتجاوز آلاف الدولارات. مع تطبيقنا، لا تحتاج لشراء أي جهاز! جوال العميل هو القارئ الشخصي الخاص به مباشرة عبر كود QR."
+      q: 'كيف يوفّر باركودي ميزانية المتجر مقارنة بالحلول التقليدية؟',
+      a: 'تحتاج الحلول التقليدية إلى شراء أجهزة قراءة أسعار وتثبيتها وربطها بشبكة سلكية وخادم محلي، وهي كلفة تتجاوز آلاف الدنانير. مع باركودي لا تشتري أي جهاز؛ فهاتف العميل هو قارئ الأسعار الخاص به مباشرة عبر رمز QR.',
     },
     {
-      q: "كيف يساهم النظام في منع بعثرة المنتجات في الرفوف غير المناسبة؟",
-      a: "المشكلة الشائعة قديماً هي أن الزبون يأخذ منتجاً معيناً ليذهب به إلى قارئ الأسعار البعيد المثبّت على أحد الجدران، وعندما يكتشف سعره ويريد التراجع، يضعه في أقرب رف أمامه بلا مبالاة مسبباً فوضى عارمة. بفضل 'قارئ متجري'، يستعلم الزبون عن السعر مباشرة وهو واقف أمام المنتج دون أن يبرح مكانه، مما يقضي تماماً على هذه المشكلة الشائعة."
+      q: 'هل يحتاج العميل إلى تثبيت أي تطبيق لاستخدامه؟',
+      a: 'لا. لا يحتاج العميل إلى تثبيت شيء أو إنشاء حساب. يكفي أن يوجّه كاميرا هاتفه إلى رمز QR الخاص بمتجرك ليدخل مباشرة إلى واجهة ويب سريعة تحمل شعارك وتعمل كقارئ متطوّر عبر الكاميرا.',
     },
     {
-      q: "هل يتطلب من الزبون تحميل أي تطبيق من المتجر لاستخدامه؟",
-      a: "مطلقاً! لا يحتاج الزبون لتحميل أي شيء أو تسجيل حساب. كل ما عليه هو توجيه كاميرا هاتفه نحو رمز الـ QR الخاص بمتجركم، ليدخل مباشرة على واجهة ويب سريعة جداً ومخصصة تعرض شعاركم، وتعمل كقارئ متطور عبر كاميرا هاتفه."
+      q: 'كيف أرفع منتجاتي إلى النظام؟',
+      a: 'من لوحة التحكم تنزّل قالباً جاهزاً، تملؤه بأسماء المنتجات وأرقام الباركود والأسعار في إكسل أو جداول بيانات Google، ثم ترفعه في ثوانٍ ليصبح متجرك جاهزاً للعمل.',
     },
     {
-      q: "كيف يمكنني رفع بضاعتي ومنتجاتي إلى النظام؟",
-      a: "الأمر غاية في السهولة! من خلال لوحة تحكم الإدارة الخاصة بك، تقوم بتنزيل قالب إكسل جاهز، تملأ أسماء المنتجات، أرقام الباركود، والأسعار، ثم ترفعه في ثانية واحدة مباشرة ليصبح متجرك جاهزاً للعمل بلحظات."
-    }
+      q: 'ما المقصود بالاقتراحات الذكية في الباقة الاحترافية؟',
+      a: 'حين يمسح العميل منتجاً — عبوة نوتيلا مثلاً — يعرض له النظام وصفات يدخل فيها ذلك المنتج، ومنتجات مكمّلة تُشترى معه عادةً، وعروض المتجر عليه في تلك اللحظة. هكذا تتحوّل كل عملية استعلام عن سعر إلى فرصة بيع إضافية.',
+    },
+    {
+      q: 'هل سلة التسوق الذكية إلزامية في متجري؟',
+      a: 'لا، السلة ميزة اختيارية بالكامل. من لوحة التحكم تفعّلها أو توقفها بضغطة واحدة وفق رغبة متجرك؛ فإن أوقفتها عمل باركودي كقارئ أسعار خالص يعرض السعر والمواصفات فقط، وإن فعّلتها أضاف عملاؤك الأصناف وحسبوا إجمالي جولتهم قبل الوصول إلى الكاشير.',
+    },
+    {
+      q: 'كيف يمنع باركودي تبعثر المنتجات في الرفوف الخاطئة؟',
+      a: 'في الطريقة القديمة يحمل العميل المنتج إلى قارئ الأسعار البعيد، فإذا عدل عن شرائه تركه في أقرب رفّ مسبّباً فوضى وتضارباً في الأسعار. مع باركودي يستعلم العميل عن السعر وهو واقف أمام المنتج دون أن يبرح مكانه، فينتهي هذا الخلل تماماً.',
+    },
   ];
 
   return (
-    <div className="min-h-screen relative overflow-hidden text-gray-800 font-sans selection:bg-primary-main selection:text-white" dir="rtl">
-      
-      {/* Dynamic Ambient Blur Blobs for Glassmorphism 2.0 Effect */}
-      <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-primary-pale/60 blur-[130px] pointer-events-none -z-10" />
-      <div className="absolute top-[40%] left-[-15%] w-[600px] h-[600px] rounded-full bg-emerald-100/40 blur-[160px] pointer-events-none -z-10" />
-      <div className="absolute bottom-[-10%] right-[10%] w-[550px] h-[550px] rounded-full bg-sky-100/50 blur-[140px] pointer-events-none -z-10" />
+    <div className="min-h-screen bg-white text-gray-900 font-sans selection:bg-primary-pale selection:text-primary-dark" dir="rtl">
 
-      {/* Header Sticky Container */}
-      <header className="sticky top-0 z-50 bg-white/40 backdrop-blur-md border-b border-white/60 px-4 md:px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-0 mx-auto max-w-7xl rounded-b-3xl shadow-sm">
-        <div className="flex items-center justify-center md:justify-start gap-3 w-full md:w-auto">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-primary-dark to-primary-main flex items-center justify-center text-white shadow-md shrink-0">
-            <Store className="w-5.5 h-5.5" />
+      {/* Floating pill navigation — features first, pricing last, no plan CTA */}
+      <header className="sticky top-3 z-50 px-4">
+        <nav className="mx-auto max-w-5xl flex items-center justify-between gap-3 rounded-full border border-gray-200 bg-white/85 backdrop-blur-md px-3 sm:px-4 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.05)]">
+          <div className="flex items-center gap-2.5 ps-1">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-primary-dark to-primary-main flex items-center justify-center text-white shadow-sm shrink-0">
+              <Store className="w-5 h-5" />
+            </div>
+            <div className="leading-none">
+              <span className="block text-base font-black tracking-tight text-gray-950 font-display">باركودي</span>
+              <span className="hidden sm:block text-[10px] text-gray-400 font-bold mt-0.5">بوابة تسوّق ذاتية ذكية</span>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-black tracking-tight text-gray-900 leading-none font-sans">باركودي</h1>
-            <span className="text-[10px] text-primary-dark font-bold">بوابة تسوق ذكية متكاملة لخصائص الأسعار</span>
+
+          <div className="hidden md:flex items-center gap-1 text-sm font-bold text-gray-600">
+            <a href="#how" className="px-3 py-1.5 rounded-full hover:text-gray-950 hover:bg-gray-100 transition-colors">كيف يعمل</a>
+            <a href="#why" className="px-3 py-1.5 rounded-full hover:text-gray-950 hover:bg-gray-100 transition-colors">لماذا باركودي</a>
+            <a href="#screens" className="px-3 py-1.5 rounded-full hover:text-gray-950 hover:bg-gray-100 transition-colors">من داخل التطبيق</a>
+            <a href="#pricing" className="px-3 py-1.5 rounded-full hover:text-gray-950 hover:bg-gray-100 transition-colors">الباقات</a>
           </div>
-        </div>
-        
-        <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:gap-4 w-full md:w-auto">
-          <Link 
-            to="/admin" 
-            className="flex items-center justify-center w-full md:w-auto bg-white/60 md:bg-transparent border border-white md:border-transparent shadow-sm md:shadow-none text-gray-700 font-black hover:text-primary-dark py-2.5 px-1 sm:px-3 rounded-xl hover:bg-white/80 transition-all text-xs sm:text-sm"
-          >
-            <span className="whitespace-nowrap">تسجيل الدخول للإدارة</span>
-          </Link>
-          <a 
-            href="https://wa.me/218945953967" 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="flex items-center justify-center w-full md:w-auto bg-primary-dark hover:bg-primary-dark/90 text-white px-2 sm:px-5 py-2.5 rounded-xl font-bold transition-all shadow-md text-xs sm:text-sm gap-1.5"
-          >
-            <MessageCircle className="w-4 h-4 shrink-0" />
-            <span className="whitespace-nowrap">طلب حساب متجر</span>
-          </a>
-        </div>
+
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Link
+              to="/admin"
+              className="hidden sm:inline-flex items-center rounded-full px-4 py-2 text-sm font-bold text-gray-600 hover:text-gray-950 hover:bg-gray-100 transition-colors"
+            >
+              تسجيل الدخول
+            </Link>
+            <a
+              href={whatsappLink('مرحباً، أرغب في إنشاء حساب متجر على باركودي')}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full bg-gray-950 hover:bg-gray-800 text-white px-4 sm:px-5 py-2 text-sm font-bold transition-colors"
+            >
+              <MessageCircle className="w-4 h-4 shrink-0" />
+              <span className="whitespace-nowrap">طلب حساب متجر</span>
+            </a>
+          </div>
+        </nav>
       </header>
 
-      {/* Hero Welcome Unit */}
-      <section className="max-w-6xl mx-auto px-6 pt-16 pb-12 text-center relative z-10">
-        <div className="inline-flex items-center gap-2 bg-gray-900 text-white border border-gray-800 px-4 py-2 rounded-xl shadow-xl shadow-gray-900/10 mb-6 group">
-          <span className="text-[11px] font-black tracking-widest uppercase">الجيل الجديد من حلول البيع بالتجزئة والخدمة الذاتية</span>
+      {/* Hero — headline beside a live demo of the real scan flow */}
+      <section className="relative max-w-6xl mx-auto px-6 pt-14 sm:pt-20 pb-10">
+        <div className="grid lg:grid-cols-[1.15fr_0.85fr] gap-12 lg:gap-8 items-center">
+          <div className="text-center lg:text-right">
+            <div className="flex justify-center lg:justify-start mb-7 reveal">
+              <Eyebrow>الجيل الجديد من الخدمة الذاتية في المتاجر</Eyebrow>
+            </div>
+
+            <h1 className="font-display text-4xl sm:text-5xl md:text-6xl font-black text-gray-950 tracking-tight leading-[1.15] animate-fade-in-up">
+              حوّل هاتف عميلك إلى{' '}
+              <span className="bg-gradient-to-l from-primary-dark via-primary-main to-primary-light bg-clip-text text-transparent">
+                قارئ أسعار
+              </span>{' '}
+              متطوّر
+            </h1>
+
+            <p className="text-lg md:text-xl text-gray-500 max-w-xl mx-auto lg:mx-0 mt-6 leading-relaxed font-medium">
+              بلا أجهزة تُشترى ولا شبكات تُمدّ — رمز QR واحد يكفي ليعرف عملاؤك أسعار منتجاتك فوراً وهم أمام الرفّ.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3 mt-9">
+              <a
+                href="#how"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-primary-dark hover:bg-primary-dark/90 text-white px-7 py-3.5 font-bold text-base shadow-sm transition-all hover:-translate-y-0.5"
+              >
+                <span>شاهد كيف يعمل</span>
+                <ArrowDown className="w-5 h-5" />
+              </a>
+              <a
+                href={whatsappLink('مرحباً، أرغب في استشارة مجانية حول باركودي')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full border border-gray-300 bg-white hover:border-gray-400 text-gray-800 px-7 py-3.5 font-bold text-base transition-colors"
+              >
+                <MessageCircle className="w-5 h-5 text-green-600" />
+                <span>استشارة مجانية عبر واتساب</span>
+              </a>
+            </div>
+          </div>
+
+          <div className="flex justify-center lg:justify-start animate-fade-in-up">
+            <LiveScanDemo />
+          </div>
         </div>
 
-        <h2 className="text-4xl md:text-6xl font-black text-gray-950 mb-6 leading-[1.2] max-w-4xl mx-auto animate-fade-in-up">
-          حوّل جوال عميلك إلى <span className="animate-gradient bg-gradient-to-r from-primary-dark via-primary-main to-primary-dark bg-clip-text text-transparent">جهاز قارئ أسعار</span> متطور وبأقل تكلفة!
-        </h2>
-        
-        <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto mb-10 leading-relaxed font-medium">
-          وداعاً للتكاليف الباهظة للأجهزة والشبكات! ارفع قائمة منتجاتك بملف إكسل، واجعل زبائنك يتعرفون على الأسعار فورا من كاميرتهم الخاصة عبر كود QR وبشكل فائق السهولة والسلاسة.
-        </p>
-
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-          <a 
-            href="#pricing" 
-            className="w-full sm:w-auto flex items-center justify-center gap-3 bg-gradient-to-r from-primary-dark to-primary-main text-white px-8 py-4 rounded-2xl font-black text-lg transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
-          >
-            <span>استعرض باقات الاشتراك</span>
-            <ArrowLeft className="w-5 h-5" />
-          </a>
-          <a 
-            href="https://wa.me/218945953967" 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="w-full sm:w-auto flex items-center justify-center gap-3 bg-white/80 backdrop-blur-md hover:bg-white border border-gray-200 text-gray-700 px-8 py-4 rounded-2xl font-bold text-lg transition-all shadow-sm"
-          >
-            <MessageCircle className="w-5 h-5 text-green-600" />
-            <span>استشارة مجانية (واتساب)</span>
-          </a>
-        </div>
-
-        {/* Hero trust / stats strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 max-w-4xl mx-auto mb-16">
-          {heroStats.map((stat, i) => (
-            <div
-              key={i}
-              className="reveal bg-white/60 backdrop-blur-md border border-white/70 rounded-2xl px-4 py-5 flex flex-col items-center gap-1.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
-            >
-              <div className="w-10 h-10 rounded-xl bg-primary-pale/70 text-primary-dark flex items-center justify-center mb-1">
-                <stat.icon className="w-5 h-5" />
+        {/* Stat strip — clean hairline row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px mt-14 rounded-3xl overflow-hidden border border-gray-200 bg-gray-200 reveal">
+          {heroStats.map((stat) => (
+            <div key={stat.label} className="bg-white px-5 py-6 flex flex-col items-center gap-1.5 text-center">
+              <div className="w-9 h-9 rounded-xl bg-primary-pale/60 text-primary-dark flex items-center justify-center mb-1">
+                <stat.icon className="w-4.5 h-4.5" />
               </div>
-              <span className="text-xl md:text-2xl font-black text-gray-900 leading-none">{stat.value}</span>
-              <span className="text-[11px] text-gray-500 font-bold text-center leading-tight">{stat.label}</span>
+              <span className="text-xl md:text-2xl font-black text-gray-950 leading-none font-display">{stat.value}</span>
+              <span className="text-[11px] text-gray-400 font-bold leading-tight">{stat.label}</span>
             </div>
           ))}
         </div>
-
-        {/* Floating Glassmorphic App Feature Mockup Screen */}
-        <div className="reveal relative mx-auto max-w-4xl rounded-3xl p-3 bg-gradient-to-tr from-white/30 to-white/60 backdrop-blur-xl border border-white/80 shadow-[0_50px_100px_rgba(35,133,142,0.1)] mb-20 overflow-hidden">
-          <div className="absolute -top-12 -left-12 w-32 h-32 rounded-full bg-primary-light/50 blur-2xl pointer-events-none" />
-          <div className="absolute -bottom-12 -right-12 w-32 h-32 rounded-full bg-emerald-200/50 blur-2xl pointer-events-none" />
-          
-          <div className="bg-white/90 rounded-2xl shadow-inner border border-gray-100 overflow-hidden">
-             {/* Virtual Dashboard Simulator Bar */}
-             <div className="bg-gray-50 border-b border-gray-100 px-4 py-3 flex items-center text-xs text-gray-400 font-bold">
-               <div className="flex items-center gap-2">
-                 <span className="w-2.5 h-2.5 rounded-full bg-rose-400" />
-                 <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-               </div>
-             </div>
-
-             <div className="p-6 md:p-8 grid md:grid-cols-2 gap-8 text-right items-center">
-               <div className="space-y-4">
-                 <div className="inline-block bg-primary-pale text-primary-dark px-3 py-1 rounded-full text-xs font-black">
-                   محاكاة تفاعلية
-                 </div>
-                 <h4 className="text-2xl font-black text-gray-900 leading-snug">
-                   واجهة مستخدم ذكية وسريعة تناسب شاشات الهواتف
-                 </h4>
-                 <p className="text-gray-500 text-sm leading-relaxed">
-                   عندما يمسح الزبون الكود المطبوع على الرف أو سلال المشتريات، سيتم نقله في ثانية واحدة لواجهة ويب بصرية تتيح له توجيه الكاميرا إلى أي صنف ليظهر السعر والمواصفات فوراً!
-                 </p>
-                 
-                 <div className="grid grid-cols-2 gap-3 pt-2">
-                   <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
-                     <span className="block text-xl font-black text-primary-dark">100%</span>
-                     <span className="text-[10px] text-gray-400 font-bold">متوافق مع الهواتف</span>
-                   </div>
-                   <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 text-center">
-                     <span className="block text-xl font-black text-emerald-600">صفر ثانية</span>
-                     <span className="text-[10px] text-gray-400 font-bold">وقت تنزيل التطبيق</span>
-                   </div>
-                 </div>
-               </div>
-
-               <div className="bg-gradient-to-tr from-gray-50 to-gray-100/50 p-6 rounded-2xl border border-gray-200/60 relative">
-                  <div className="flex items-center justify-between mb-4 border-b border-gray-200/80 pb-3">
-                    <span className="font-black text-sm text-gray-800">سلة التسوق الذكية للزبون</span>
-                    <span className="bg-primary-main/20 text-primary-dark text-xs px-2.5 py-0.5 rounded-full font-bold">جولتك الحالية</span>
-                  </div>
-
-                  {/* Simulated items in shopping cart */}
-                  <div className="space-y-3 mb-4">
-                    <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">🥛</span>
-                        <div className="text-right">
-                          <span className="block text-xs font-black text-gray-800">حليب كامل الدسم 1 لتر</span>
-                          <span className="text-[10px] text-gray-400 font-mono">628100234561</span>
-                        </div>
-                      </div>
-                      <span className="text-xs font-black text-primary-dark">2.50 د.ل</span>
-                    </div>
-
-                    <div className="bg-white p-3 rounded-xl border border-gray-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">🍫</span>
-                        <div className="text-right">
-                          <span className="block text-xs font-black text-gray-800">شوكولاتة بندق داكنة</span>
-                          <span className="text-[10px] text-gray-400 font-mono">628100119852</span>
-                        </div>
-                      </div>
-                      <span className="text-xs font-black text-primary-dark">1.25 د.ل</span>
-                    </div>
-                  </div>
-
-                  <div className="bg-primary-dark text-white p-3.5 rounded-xl flex items-center justify-between text-xs font-bold">
-                    <span>مجموع المشتريات التقديري</span>
-                    <span className="text-sm font-black text-primary-pale">3.75 دينار</span>
-                  </div>
-               </div>
-             </div>
-          </div>
-        </div>
       </section>
 
-      {/* How It Works - 3 simple steps */}
-      <section className="max-w-6xl mx-auto px-6 py-20 relative z-10">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <span className="inline-flex items-center justify-center px-4 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black tracking-widest uppercase shadow-xl shadow-gray-900/10 border border-gray-800">ثلاث خطوات بسيطة</span>
-          <h3 className="text-3xl md:text-4xl font-black text-gray-950 mt-4 mb-6 leading-tight">
-            كيف يعمل باركودي؟ بسيط كلمح البصر
-          </h3>
-          <p className="text-md text-gray-600 font-medium">
-            لا أجهزة، لا تطبيقات، ولا تعقيد. ثلاث خطوات فقط تفصل عميلك عن معرفة السعر وإتمام جولته بثقة.
+      {/* How it works — numbered sequence */}
+      <section id="how" className="max-w-5xl mx-auto px-6 py-24 md:py-28 scroll-mt-20">
+        <div className="max-w-2xl mb-14 text-right">
+          <Eyebrow>ثلاث خطوات</Eyebrow>
+          <h2 className="font-display text-3xl md:text-5xl font-black text-gray-950 mt-5 leading-tight tracking-tight">
+            كيف يعمل باركودي؟
+          </h2>
+          <p className="text-base md:text-lg text-gray-500 mt-4 font-medium leading-relaxed">
+            لا أجهزة، ولا تطبيقات، ولا تعقيد. ثلاث خطوات فقط تفصل عميلك عن معرفة السعر وإتمام جولته بثقة.
           </p>
         </div>
 
-        <div className="relative grid md:grid-cols-3 gap-8">
-          {/* Connecting line (desktop) */}
-          <div className="hidden md:block absolute top-12 right-[16%] left-[16%] h-0.5 bg-gradient-to-l from-primary-light/0 via-primary-light to-primary-light/0 -z-0" />
-
+        <div className="grid md:grid-cols-3 gap-5">
           {howItWorks.map((step, i) => (
             <div
-              key={i}
-              className="reveal relative z-10 bg-white/70 backdrop-blur-md border border-white/70 rounded-3xl p-8 text-center shadow-sm hover:shadow-lg hover:-translate-y-1.5 transition-all duration-300"
+              key={step.title}
+              className="reveal group rounded-3xl border border-gray-200 bg-white p-7 text-right hover:border-gray-300 hover:-translate-y-1 transition-all duration-300"
             >
-              <div className="relative mx-auto mb-6 w-24 h-24">
-                <div className="absolute inset-0 rounded-full bg-primary-pale/50 blur-xl" />
-                <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-tr from-primary-dark to-primary-main text-white flex items-center justify-center shadow-lg">
-                  <step.icon className="w-10 h-10" />
+              <div className="flex items-center justify-between mb-6">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary-dark to-primary-main text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                  <step.icon className="w-7 h-7" />
                 </div>
-                <span className="absolute -top-2 -left-2 w-8 h-8 rounded-full bg-white text-primary-dark font-black text-sm flex items-center justify-center shadow-md border border-primary-light/40">
-                  {i + 1}
-                </span>
+                <span className="text-5xl font-black text-gray-100 leading-none tabular-nums font-display">{`0${i + 1}`}</span>
               </div>
-              <h4 className="text-xl font-black text-gray-950 mb-3">{step.title}</h4>
+              <h3 className="text-xl font-black text-gray-950 mb-2.5 font-display">{step.title}</h3>
               <p className="text-sm text-gray-500 font-medium leading-relaxed">{step.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Extreme Core Benefits Block - Requested Details */}
-      <section className="bg-white/40 backdrop-blur-xl border-y border-white/60 py-24 relative z-10">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="inline-flex items-center justify-center px-4 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black tracking-widest uppercase shadow-xl shadow-gray-900/10 border border-gray-800">مقارنة وحلول فريدة</span>
-            <h3 className="text-3xl md:text-4xl font-black text-gray-950 mt-4 mb-6 leading-tight">
-              لماذا يُعد قارئ متجري الخيار والأول والأكثر ذكاءً؟
-            </h3>
-            <p className="text-md text-gray-600 font-medium font-sans">
-              واجه مشاكل المحل التقليدية وحوّلها إلى تجربة تقنية تفاعلية تبهج عملائك وسهّل الإدارة المالية وتحديثات المخازن فوراً.
+      {/* Why Barcodi — bento grid in the agreed order */}
+      <section id="why" className="bg-gray-50 border-y border-gray-200 py-24 md:py-28 scroll-mt-20">
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="max-w-2xl mb-14 text-right">
+            <Eyebrow>لماذا باركودي</Eyebrow>
+            <h2 className="font-display text-3xl md:text-5xl font-black text-gray-950 mt-5 leading-tight tracking-tight">
+              الخيار الأذكى لمتجرك
+            </h2>
+            <p className="text-base md:text-lg text-gray-500 mt-4 font-medium leading-relaxed">
+              حوّل مشكلات المتجر التقليدية إلى تجربة رقمية تفاعلية تُسعد عملاءك وتسهّل الإدارة المالية وتحديث المخزون فوراً.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            
-            {/* Unique Benefit 1: Massive Budget Cost Savings */}
-            <div className="reveal bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <DollarSign className="w-6 h-6" />
-              </div>
-              <h4 className="text-lg font-black text-gray-950 mb-3">اقتصادي وموفر للميزانية</h4>
-              <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                لا داعي لشراء أجهزة قارئ الأسعار اللاسلكية الباهظة أو توصيل كابلات إيثرنت وشبكات معقدة لكل جدار وصيانة مكلفة. وبذلك يوفر المتجر آلاف الدينارات مستثمراً الهواتف التي يحملها العملاء بالفعل.
-              </p>
-            </div>
-
-            {/* Unique Benefit 2: Solving Stray Products Shelf Error */}
-            <div className="reveal bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <XCircle className="w-6 h-6" />
-              </div>
-              <h4 className="text-lg font-black text-gray-950 mb-3">لا بعثرة للمنتجات بعد اليوم</h4>
-              <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                وداعاً لوضع المنتجات في غير أماكنها! المشكلة الشائعة قديماً هي قيام العميل بحمل الصنف لقارئ السعر البعيد، وحين يتراجع عن شرائه، يتركه في رف خاطئ مسبباً فوضى وتضارب أسعار. الآن يمكنه الفحص بلحظتها أمام الرف تماماً.
-              </p>
-            </div>
-
-            {/* Unique Benefit 3: Customer Satisfaction & Ease of Shoppping */}
-            <div className="reveal bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <Award className="w-6 h-6" />
-              </div>
-              <h4 className="text-lg font-black text-gray-950 mb-3">رضى العملاء وتسهيل تسوقهم</h4>
-              <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                تقديم تجربة تسوق حديثة وعالمية تحترم عقلية المستهلك وتوفر له تصفحاً واثقاً وسريعاً ومريحاً للغاية، ما يضمن ولاءه الكامل لعلامتكم التجارية وعودته الدائمة للشراء.
-              </p>
-            </div>
-
-            {/* Unique Benefit 4: Fast Cloud Excel Spreadsheet Integration */}
-            <div className="reveal bg-white/70 backdrop-blur-md border border-white/60 p-8 rounded-3xl shadow-sm hover:shadow-md transition-all text-right group hover:-translate-y-1 duration-300">
-              <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <UploadCloud className="w-6 h-6" />
-              </div>
-              <h4 className="text-lg font-black text-gray-950 mb-3">رفع الإكسل الفوري الذكي</h4>
-              <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                هل لديك آلاف السلع والأصناف؟ قم بإدراجها في ملف إكسل وارفعه ليقوم النظام بقراءة وتجاوز الباركودات المكررة والدمج تلقائياً بضغطة زر واحدة بدون عناء الإدخال اليدوي.
-              </p>
-            </div>
-
-          </div>
-
-          {/* Interactive Feature: Shopping Cart Highlight */}
-          <div className="mt-16 bg-gradient-to-tr from-primary-pale/40 to-white/70 backdrop-blur-md border border-white rounded-[2.5rem] p-8 md:p-12 shadow-sm flex flex-col lg:flex-row items-center justify-between gap-12">
-             <div className="lg:w-1/2 space-y-6 text-right">
-               <div className="inline-flex items-center gap-2 bg-gray-900 text-white border border-gray-800 px-4 py-2 rounded-xl shadow-xl shadow-gray-900/10">
-                 <ShoppingCart className="w-4 h-4 text-primary-main" />
-                 <span className="text-[11px] font-black tracking-widest uppercase">ميزة سلة المحتويات المضمّنة</span>
-               </div>
-               <h4 className="text-3xl font-black text-gray-950 leading-tight">
-                  مراقبة وحساب المجموع مباشرة من يد العميل أثناء التجول!
-               </h4>
-               <p className="text-gray-600 text-sm leading-relaxed">
-                 عند قيام العميل بمسح الأصناف، يستطيع بلمسة زر إضافتها إلى السلة وتعديل الكميات ليرى إجمالي السعر المتوقع قبل الوصول للكاشير. هذه الميزة تقلل الإحراج عند نقطة الدفع، وتجعل العميل يتخذ قرارات مستنيرة وتزيد من معدلات الشراء.
-               </p>
-               <ul className="space-y-2 text-xs font-bold text-gray-600">
-                 <li className="flex items-center gap-2.5">
-                   <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                     <Check className="w-3 h-3" />
-                   </div>
-                   <span>حساب تراكمي فوري وفق إعدادات العملة المحلية لمحلكم</span>
-                 </li>
-                 <li className="flex items-center gap-2.5">
-                   <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                     <Check className="w-3 h-3" />
-                   </div>
-                   <span>تعديل الكميات وإضافة السكاكر أو حذفه بسهولة تامة</span>
-                 </li>
-               </ul>
-             </div>
-
-             <div className="lg:w-5/12 w-full flex justify-center transform hover:rotate-1 transition-transform duration-500">
-                <div className="w-full max-w-[320px] bg-white rounded-[2rem] p-6 shadow-xl border border-gray-100 flex flex-col">
-                  {/* Smartphone Simulator Top */}
-                  <div className="w-20 h-4 bg-gray-200 rounded-full mx-auto mb-6 flex items-center justify-center relative">
-                    <span className="w-2 h-2 rounded-full bg-gray-400 absolute right-1" />
-                  </div>
-
-                  {/* Cart Content Interface */}
-                  <span className="text-[10px] text-gray-400 font-bold block mb-1">واجهة العميل الخاصة بالمتجر</span>
-                  <div className="flex items-center justify-between mb-4">
-                    <h5 className="font-black text-gray-900 text-lg">سلة مشترياتي</h5>
-                    <span className="text-xs bg-gray-100 text-gray-600 font-bold px-2 py-0.5 rounded-lg">3 أصناف</span>
-                  </div>
-
-                  {/* Simulated list */}
-                  <div className="space-y-2.5 flex-1 mb-6">
-                    <div className="p-2 bg-gray-50 rounded-lg flex items-center justify-between border border-gray-100">
-                       <div className="text-right">
-                         <span className="block text-xs font-black text-gray-800">علبة بسكويت بالتمر</span>
-                         <span className="text-[9px] text-gray-400">الكمية: 1</span>
-                       </div>
-                       <span className="text-xs font-black text-primary-dark">2.00 د.ل</span>
-                    </div>
-
-                    <div className="p-2 bg-gray-50 rounded-lg flex items-center justify-between border border-gray-100">
-                       <div className="text-right">
-                         <span className="block text-xs font-black text-gray-800">عصير برتقال طبيعي</span>
-                         <span className="text-[9px] text-gray-400">الكمية: 2</span>
-                       </div>
-                       <span className="text-xs font-black text-primary-dark">3.50 د.ل</span>
-                    </div>
-
-                    <div className="p-2 bg-gray-50 rounded-lg flex items-center justify-between border border-gray-100">
-                       <div className="text-right">
-                         <span className="block text-xs font-black text-gray-800">مياه معدنية 500 مل</span>
-                         <span className="text-[9px] text-gray-400">الكمية: 1</span>
-                       </div>
-                       <span className="text-xs font-black text-primary-dark">0.50 د.ل</span>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-dashed border-gray-150 pt-3 flex items-center justify-between text-xs font-black text-gray-800">
-                    <span>مجموع السلة الذكي:</span>
-                    <span className="text-sm text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg">6.00 د.ل</span>
-                  </div>
-                </div>
-             </div>
+          <div className="reveal">
+            <WhyShowcase items={benefits} />
           </div>
         </div>
       </section>
 
-      {/* Pricing Section Grid - Requested Details */}
-      <section id="pricing" className="py-24 relative z-10">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <span className="inline-flex items-center justify-center px-4 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black tracking-widest uppercase shadow-xl shadow-gray-900/10 border border-gray-800">التأسيس وخطط الأسعار</span>
-            <h3 className="text-3xl md:text-4xl font-black text-gray-950 mt-4 mb-6 leading-tight">
-               خطط اشتراك شفافة تلائم مختلف الأحجام
-            </h3>
-            <p className="text-md text-gray-600 font-medium font-sans">
-              اختر الخطة التي تناسب احتياجات متجرك اليوم، وقم بالترقية أو التغيير في أي وقت تشاء. بدون تكاليف خفية إضافية.
-            </p>
+      {/* Inside the app — faithful recreations of the real client screens */}
+      <section id="screens" className="max-w-6xl mx-auto px-6 py-24 md:py-28 scroll-mt-20">
+        <div className="max-w-2xl mb-14 text-right">
+          <Eyebrow>من داخل التطبيق</Eyebrow>
+          <h2 className="font-display text-3xl md:text-5xl font-black text-gray-950 mt-5 leading-tight tracking-tight">
+            هذا ما يراه عميلك على هاتفه
+          </h2>
+          <p className="text-base md:text-lg text-gray-500 mt-4 font-medium leading-relaxed">
+            واجهة حقيقية سريعة وبسيطة تحمل شعار متجرك، من لحظة المسح إلى حساب السلة — والسلة ميزة اختيارية تتحكم بها إدارة المتجر بالكامل.
+          </p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-10 items-start">
+          {/* Screen 1 — the scanner */}
+          <div className="reveal">
+            <PhoneFrame label="الماسح الضوئي — يقرأ الباركود من الكاميرا مباشرة">
+              <div className="pt-8 pb-5 px-4 min-h-[440px] bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col gap-3" dir="rtl">
+                <div className="grid grid-cols-2 gap-1 bg-white/50 p-1 rounded-2xl border border-white">
+                  <div className="py-2 rounded-xl text-[9px] font-bold bg-white text-primary-dark border border-primary-light/30 flex flex-col items-center gap-1">
+                    <Barcode className="w-3.5 h-3.5" />
+                    المسح الضوئي بالكاميرا
+                  </div>
+                  <div className="py-2 rounded-xl text-[9px] font-bold text-gray-500 flex flex-col items-center gap-1 justify-center">
+                    <span className="text-[7px] font-mono bg-primary-pale text-primary-dark px-1 rounded">6281001234567</span>
+                    إدخال الباركود يدوياً
+                  </div>
+                </div>
+                <p className="text-[9px] text-gray-500 text-center">وجّه الباركود داخل الإطار الأخضر</p>
+                <div className="relative w-full aspect-[4/3] bg-gray-950 rounded-2xl border-[4px] border-gray-900 overflow-hidden">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_60%_40%,#2c3530_0%,#12150f_65%)]" />
+                  <div className="absolute left-[11%] right-[11%] top-1/2 h-[40%] -translate-y-1/2 rounded-xl border-2 border-primary-light/90 shadow-[0_0_0_999px_rgba(0,0,0,0.30)]" />
+                  <div className="absolute left-0 right-0 h-[2px] bg-emerald-400 shadow-[0_0_16px_#10b981] animate-laser" style={{ top: '0%' }} />
+                  <div className="absolute top-2.5 right-2.5 p-1.5 rounded-lg bg-black/60 border border-white/20">
+                    <FlipHorizontal className="w-3 h-3 text-white" />
+                  </div>
+                  <div className="absolute top-9 right-2.5 p-1.5 rounded-lg bg-black/60 border border-white/20">
+                    <Zap className="w-3 h-3 text-amber-300" />
+                  </div>
+                  <div className="absolute bottom-2 left-2 right-2 bg-black/80 px-2.5 py-1.5 rounded-lg text-[7px] font-bold text-white flex items-center gap-1 border border-white/10">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    المسح التلقائي مفعّل...
+                  </div>
+                </div>
+                <div className="flex items-center justify-center gap-1.5 text-[9px] text-gray-400 font-medium mt-1">
+                  <Camera className="w-3 h-3" />
+                  يدعم EAN وUPC وCode-128 وغيرها
+                </div>
+              </div>
+            </PhoneFrame>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8 items-stretch">
-            {pricePlans.map((plan, idx) => (
-              <div
-                key={idx}
-                className={`relative bg-white/70 backdrop-blur-md rounded-[2rem] border p-8 flex flex-col justify-between transition-all duration-300 shadow-sm ${
-                   plan.popular 
-                     ? 'border-primary-main/80 ring-4 ring-primary-main/10 scale-100 md:scale-105 z-20' 
-                     : 'border-white/60 hover:border-gray-200'
-                }`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-primary-dark to-primary-main text-white font-black text-[11px] px-4 py-1.5 rounded-full shadow-md flex items-center gap-1.5">
-                    <Flame className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
-                    <span>الباقة الأوفر والأنسب</span>
+          {/* Screen 2 — the product card */}
+          <div className="reveal">
+            <PhoneFrame label="بطاقة المنتج — الاسم والسعر والمواصفات فور القراءة">
+              <div className="pt-8 pb-5 px-4 min-h-[440px] bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col justify-center" dir="rtl">
+                <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-white p-4 shadow-[0_12px_40px_-5px_rgba(53,133,142,0.18)]">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="inline-flex items-center gap-1 bg-white/70 text-primary-dark text-[8px] font-bold px-2 py-1 rounded-full border border-white shadow-sm">
+                      🥛 قسم الألبان
+                    </span>
+                    <span className="text-[8px] text-gray-500 bg-white px-2 py-1 rounded-lg font-bold border border-white/60">عد للمسح ←</span>
+                  </div>
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-pale to-primary-light border-[3px] border-white flex items-center justify-center text-2xl mb-2 shadow-sm">
+                      🥛
+                    </div>
+                    <h4 className="text-[13px] font-black text-gray-900 leading-snug">حليب كامل الدسم — ١ لتر</h4>
+                    <span className="text-[8px] font-mono text-gray-400 bg-white/60 px-2 py-0.5 rounded-md mt-1">باركود: 628100234561</span>
+                    <div className="mt-2.5 flex items-baseline gap-1">
+                      <span className="text-2xl font-black text-primary-dark font-mono tracking-tight">2.50</span>
+                      <span className="text-[11px] font-black text-gray-800">د.ل</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 mt-3 bg-white/70 rounded-lg px-2.5 py-1.5 border border-white text-[8px] text-gray-700">
+                      <span><b>الوزن:</b> ١ لتر</span>
+                      <span className="w-px h-2.5 bg-gray-300" />
+                      <span className="flex items-center gap-0.5"><Flame className="w-2.5 h-2.5 text-amber-500 fill-amber-500" /><b>السعرات:</b> ٦١٠ كالو</span>
+                    </div>
+                    <div className="w-full border-t border-gray-200/60 mt-3 pt-3">
+                      <span className="text-[8px] font-bold text-gray-600 block mb-2">حدد كمية الشراء:</span>
+                      <div className="flex items-center justify-center gap-3 max-w-[120px] mx-auto bg-white/70 border border-white p-1 rounded-xl">
+                        <span className="w-7 h-7 rounded-lg bg-white border border-white flex items-center justify-center text-gray-500"><Minus className="w-3 h-3" /></span>
+                        <span className="text-sm font-black text-gray-900 font-mono">2</span>
+                        <span className="w-7 h-7 rounded-lg bg-white border border-white flex items-center justify-center text-gray-500"><Plus className="w-3 h-3" /></span>
+                      </div>
+                      <div className="mt-3 bg-primary-dark text-white text-[10px] font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5">
+                        <ShoppingCart className="w-3.5 h-3.5" />
+                        أضِف إلى السلة
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </PhoneFrame>
+          </div>
+
+          {/* Screen 3 — the smart cart */}
+          <div className="reveal">
+            <PhoneFrame label="السلة الذكية (اختيارية) — فعّلها أو أوقفها من لوحة التحكم">
+              <div className="pt-8 pb-5 px-4 min-h-[440px] bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col gap-3" dir="rtl">
+                <div className="flex items-center justify-between mt-1">
+                  <h4 className="font-black text-gray-900 text-sm font-display">سلة مشترياتي</h4>
+                  <span className="text-[9px] bg-white border border-gray-200 text-gray-600 font-bold px-2 py-0.5 rounded-lg">3 أصناف</span>
+                </div>
+                <div className="space-y-2 flex-1">
+                  {[
+                    { emoji: '🍫', name: 'نوتيلا كريمة البندق ٣٥٠غ', qty: '1', price: '12.50' },
+                    { emoji: '🧃', name: 'عصير برتقال طبيعي', qty: '2', price: '3.50' },
+                    { emoji: '💧', name: 'مياه معدنية ٥٠٠ مل', qty: '1', price: '0.50' },
+                  ].map((row) => (
+                    <div key={row.name} className="p-2.5 bg-white/80 rounded-xl flex items-center justify-between border border-white shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{row.emoji}</span>
+                        <div className="text-right">
+                          <span className="block text-[10px] font-black text-gray-800 leading-tight">{row.name}</span>
+                          <span className="text-[8px] text-gray-400">الكمية: {row.qty}</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black text-primary-dark font-mono">{row.price} د.ل</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-primary-dark text-white p-3 rounded-2xl flex items-center justify-between text-[10px] font-bold">
+                  <span>المجموع التقديري</span>
+                  <span className="text-sm font-black text-primary-pale font-mono">20.00 د.ل</span>
+                </div>
+                <p className="text-[8px] text-gray-400 text-center leading-relaxed">
+                  حساب تراكمي فوري بعملة متجرك — يصل عميلك إلى الكاشير دون مفاجآت
+                </p>
+                <div className="flex items-center justify-center gap-1.5 text-[8px] font-bold text-primary-dark bg-white/70 border border-primary-light/40 rounded-full px-2.5 py-1.5">
+                  <span className="relative inline-flex w-6 h-3.5 rounded-full bg-primary-dark shrink-0">
+                    <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-white" />
+                  </span>
+                  ميزة اختيارية — بيد إدارة المتجر تفعيلها أو إيقافها
+                </div>
+              </div>
+            </PhoneFrame>
+          </div>
+        </div>
+      </section>
+
+      {/* AI add-ons — the dark band borrows the viewfinder's own atmosphere */}
+      <section className="max-w-6xl mx-auto px-6 pb-24 md:pb-28">
+        <div className="reveal relative rounded-[2.5rem] bg-gray-950 text-white p-8 md:p-14 overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_15%,rgba(53,133,142,0.35)_0%,transparent_50%),radial-gradient(circle_at_10%_90%,rgba(125,167,140,0.2)_0%,transparent_45%)]" />
+          <div className="absolute left-0 right-0 h-[2px] bg-emerald-400/70 shadow-[0_0_20px_#10b981] animate-laser opacity-40 pointer-events-none" style={{ top: '0%' }} />
+
+          <div className="relative">
+            <div className="max-w-2xl text-right mb-10">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-[11px] font-bold tracking-wide text-primary-pale">
+                <Sparkles className="w-3.5 h-3.5" />
+                إضافات الذكاء الاصطناعي — حصرياً في الباقة الاحترافية
+              </span>
+              <h2 className="font-display text-3xl md:text-5xl font-black mt-6 leading-tight tracking-tight">
+                كل عملية مسح... فرصة بيع جديدة
+              </h2>
+              <p className="text-base md:text-lg text-white/70 mt-4 font-medium leading-relaxed">
+                لا يكتفي باركودي بعرض السعر؛ بل يقرأ ما بين يدي عميلك ويقترح عليه ما يليق به. يمسح العميل عبوة نوتيلا، فتظهر له وصفات شهية تدخل فيها — فيعود إلى الرفوف ليشتري مكوّناتها من متجرك.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-5">
+              {aiFeatures.map((feat) => (
+                <div key={feat.title} className="rounded-3xl border border-white/15 bg-white/5 backdrop-blur-sm p-6 text-right hover:bg-white/10 transition-colors">
+                  <div className="w-11 h-11 rounded-2xl bg-primary-pale/20 text-primary-pale flex items-center justify-center mb-4">
+                    <feat.icon className="w-5.5 h-5.5" />
+                  </div>
+                  <h3 className="text-lg font-black mb-2 font-display">{feat.title}</h3>
+                  <p className="text-xs text-white/60 font-medium leading-relaxed">{feat.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing — two plans, LYD */}
+      <section id="pricing" className="max-w-5xl mx-auto px-6 pb-24 md:pb-28 scroll-mt-20">
+        <div className="max-w-2xl mb-14 text-right">
+          <Eyebrow>خطط الأسعار</Eyebrow>
+          <h2 className="font-display text-3xl md:text-5xl font-black text-gray-950 mt-5 leading-tight tracking-tight">
+            باقتان واضحتان، دون تكاليف خفية
+          </h2>
+          <p className="text-base md:text-lg text-gray-500 mt-4 font-medium leading-relaxed">
+            اختر ما يناسب حجم متجرك اليوم، ورقِّ باقتك متى شئت. الأسعار بالدينار الليبي.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-5 items-stretch max-w-4xl">
+          {pricePlans.map((plan) => (
+            <div
+              key={plan.name}
+              className={`relative rounded-3xl border p-7 flex flex-col justify-between transition-all duration-300 ${
+                plan.popular
+                  ? 'border-primary-main ring-4 ring-primary-main/10 bg-white md:-translate-y-2'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xl font-black text-gray-950 font-display">{plan.name}</h3>
+                  <span className="text-xs text-gray-400 font-bold block mt-1">{plan.badge}</span>
+                </div>
+
+                <p className="text-xs text-gray-500 font-medium leading-relaxed min-h-[48px]">{plan.description}</p>
+
+                <div className="flex items-baseline gap-2 pb-5 border-b border-gray-100">
+                  <span className="text-4xl font-black text-gray-950 font-mono tracking-tight">{plan.price}</span>
+                  <span className="text-xs text-gray-400 font-bold">{plan.period}</span>
+                </div>
+
+                <ul className="space-y-3 text-xs text-gray-700 font-medium">
+                  {plan.features.map((feat) => (
+                    <li key={feat} className="flex items-start gap-2.5">
+                      <span className="w-4.5 h-4.5 rounded-full bg-primary-pale text-primary-dark flex items-center justify-center shrink-0 mt-0.5">
+                        <Check className="w-3 h-3" />
+                      </span>
+                      <span>{feat}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {plan.aiAddons.length > 0 && (
+                  <div className="rounded-2xl border border-primary-light/50 bg-gradient-to-l from-primary-pale/60 to-white p-4">
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <Sparkles className="w-4 h-4 text-primary-dark" />
+                      <span className="text-xs font-black text-primary-dark">إضافات الذكاء الاصطناعي</span>
+                    </div>
+                    <ul className="space-y-2.5 text-xs text-gray-700 font-medium">
+                      {plan.aiAddons.map((addon) => (
+                        <li key={addon} className="flex items-start gap-2.5">
+                          <span className="w-4.5 h-4.5 rounded-full bg-primary-dark text-white flex items-center justify-center shrink-0 mt-0.5">
+                            <Sparkles className="w-2.5 h-2.5" />
+                          </span>
+                          <span>{addon}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
-
-                <div className="space-y-6">
-                  <div className="flex justify-between items-start">
-                     <div>
-                       <h4 className="text-xl font-black text-gray-950">{plan.name}</h4>
-                       <span className="text-xs text-gray-400 font-bold block mt-1">{plan.badge}</span>
-                     </div>
-                  </div>
-
-                  <p className="text-xs text-gray-500 font-medium leading-relaxed min-h-[48px]">
-                    {plan.description}
-                  </p>
-
-                  <div className="flex items-baseline gap-2 pb-4 border-b border-gray-100">
-                    <span className="text-4xl font-black text-gray-950 font-mono tracking-tight">${plan.price}</span>
-                    <span className="text-xs text-gray-400 font-bold">{plan.period}</span>
-                  </div>
-
-                  <ul className="space-y-3.5 text-xs text-gray-700 font-medium pt-2">
-                     {plan.features.map((feat, fidx) => (
-                       <li key={fidx} className="flex items-start gap-2.5">
-                         <div className="w-4.5 h-4.5 rounded-full bg-primary-pale/60 text-primary-dark flex items-center justify-center shrink-0 mt-0.5">
-                           <Check className="w-3 h-3" />
-                         </div>
-                         <span>{feat}</span>
-                       </li>
-                     ))}
-                  </ul>
-                </div>
-
-                <div className="mt-8 pt-4">
-                  <a 
-                    href={`https://wa.me/218945953967?text=${encodeURIComponent(plan.whatsappMsg)}`}
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className={`w-full py-3.5 px-4 rounded-xl text-center font-black text-sm block transition-all hover:shadow shadow-sm active:scale-[0.99] ${
-                      plan.popular 
-                        ? 'bg-gradient-to-r from-primary-dark to-primary-main text-white hover:brightness-105'
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                    }`}
-                  >
-                    {plan.buttonText}
-                  </a>
-                </div>
               </div>
-            ))}
-          </div>
+
+              <a
+                href={whatsappLink(plan.whatsappMsg)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`mt-8 w-full py-3.5 px-4 rounded-full text-center font-black text-sm block transition-all active:scale-[0.99] ${
+                  plan.popular
+                    ? 'bg-primary-dark text-white hover:bg-primary-dark/90'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                }`}
+              >
+                {plan.buttonText}
+              </a>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* Frequently Asked Questions Section */}
-      <section className="bg-white/40 backdrop-blur-xl border-t border-white/60 py-24 relative z-10">
-        <div className="max-w-4xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <span className="inline-flex items-center justify-center px-4 py-2 bg-gray-900 text-white rounded-xl text-[11px] font-black tracking-widest uppercase shadow-xl shadow-gray-900/10 border border-gray-800">لديك استفسارات؟</span>
-            <h3 className="text-2xl md:text-3xl font-black text-gray-950 mt-4">
-               الأسئلة الشائعة حول الخدمة
-            </h3>
+      {/* FAQ */}
+      <section className="bg-gray-50 border-t border-gray-200 py-24 md:py-28">
+        <div className="max-w-3xl mx-auto px-6">
+          <div className="text-right mb-12">
+            <Eyebrow>لديك سؤال؟</Eyebrow>
+            <h2 className="font-display text-3xl md:text-5xl font-black text-gray-950 mt-5 leading-tight tracking-tight">
+              الأسئلة الشائعة
+            </h2>
           </div>
 
-          <div className="space-y-4">
-             {faqs.map((faq, idx) => (
-                <div 
-                  key={idx} 
-                  className="bg-white/70 backdrop-blur-md border border-white/60 rounded-2xl overflow-hidden transition-all shadow-sm"
-                >
-                  <button 
-                    onClick={() => setActiveFaq(activeFaq === idx ? null : idx)}
-                    className="w-full p-6 text-right font-black text-gray-900 flex items-center justify-between hover:bg-white/30 transition-colors"
+          <div className="space-y-3">
+            {faqs.map((faq, idx) => {
+              const open = activeFaq === idx;
+              return (
+                <div key={faq.q} className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+                  <button
+                    onClick={() => setActiveFaq(open ? null : idx)}
+                    aria-expanded={open}
+                    className="w-full p-5 sm:p-6 text-right font-black text-gray-900 flex items-center justify-between gap-4 hover:bg-gray-50 transition-colors"
                   >
                     <span className="text-sm md:text-base leading-snug">{faq.q}</span>
-                    <HelpCircle className={`w-5 h-5 text-primary-main shrink-0 transition-transform ${activeFaq === idx ? 'rotate-180' : ''}`} />
+                    <Plus className={`w-5 h-5 text-primary-dark shrink-0 transition-transform duration-300 ${open ? 'rotate-45' : ''}`} />
                   </button>
-                  
-                  {activeFaq === idx && (
-                    <div className="px-6 pb-6 text-xs md:text-sm text-gray-500 font-medium leading-relaxed border-t border-gray-100/50 pt-4">
+                  {open && (
+                    <div className="px-5 sm:px-6 pb-6 text-sm text-gray-500 font-medium leading-relaxed border-t border-gray-100 pt-4">
                       {faq.a}
                     </div>
                   )}
                 </div>
-             ))}
+              );
+            })}
           </div>
 
-          {/* Prompt banner to connect admin */}
-          <div className="mt-16 bg-gradient-to-tr from-primary-dark/10 to-emerald-50/50 border border-primary-dark/20 p-8 rounded-[2rem] text-center space-y-4 shadow-sm">
-             <h4 className="text-xl font-black text-gray-900">هل أنت مستعد لقيادة ثورة ذكية في سوبرماركت الخاص بك؟</h4>
-             <p className="text-xs font-semibold text-gray-500 max-w-xl mx-auto leading-relaxed">
-               تواصل معنا وسنوفر لك حساباً مخصصاً لمتجرك في ثوانٍ. فريقنا جاهز لتحويل بضاعتك وتنظيمها لتقديم فحص باركود فائق السرعة والأناقة.
-             </p>
-             <div className="pt-2">
-                <a 
-                  href="https://wa.me/218945953967" 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-black px-6 py-3 rounded-xl shadow-md transition-colors text-sm"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  <span>تكلم معنا عبر واتساب الآن</span>
-                </a>
-             </div>
+          {/* Closing CTA band */}
+          <div className="mt-14 rounded-[2.5rem] bg-gradient-to-tr from-primary-dark to-primary-main text-white p-8 md:p-12 text-center space-y-5">
+            <h3 className="font-display text-2xl md:text-3xl font-black leading-tight">هل أنت مستعد لنقلة ذكية في متجرك؟</h3>
+            <p className="text-sm md:text-base font-medium text-white/85 max-w-xl mx-auto leading-relaxed">
+              تواصل معنا لنجهّز لك حساباً مخصّصاً لمتجرك في دقائق. فريقنا جاهز لتنظيم بضاعتك وتقديم فحص باركود سريع وأنيق.
+            </p>
+            <div className="pt-1">
+              <a
+                href={whatsappLink('مرحباً، أرغب في البدء مع باركودي')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-white text-primary-dark hover:bg-gray-50 font-black px-7 py-3.5 rounded-full transition-colors text-sm"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>تواصل عبر واتساب</span>
+              </a>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Styled Foot Footer */}
-      <footer className="py-12 border-t border-white/60 bg-white/50 backdrop-blur-md text-center relative z-10">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-gray-400 font-bold">
-           <div className="flex items-center gap-2 text-primary-dark">
-             <Store className="w-5 h-5" />
-             <span className="font-sans text-sm text-gray-800">Barcodi - باركودي</span>
-           </div>
-           <div>
-             <span>&copy; {new Date().getFullYear()}باركودي. جميع الحقوق محفوظة.</span>
-           </div>
-           <div className="flex items-center gap-4 text-gray-500">
-             <Link to="/admin" className="hover:text-primary-dark transition-colors">بوابة المشتركين والعملاء</Link>
-             <span>•</span>
-             <a href="https://wa.me/218945953967" target="_blank" rel="noopener noreferrer" className="hover:text-primary-dark transition-colors">الدعم الفني والخدمات</a>
-           </div>
+      {/* Footer */}
+      <footer className="bg-white border-t border-gray-200 py-10">
+        <div className="max-w-5xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-5 text-xs text-gray-400 font-bold">
+          <div className="flex items-center gap-2 text-primary-dark">
+            <Store className="w-5 h-5" />
+            <span className="text-sm text-gray-800">باركودي · Barcodi</span>
+          </div>
+          <span>© {new Date().getFullYear()} باركودي. جميع الحقوق محفوظة.</span>
+          <div className="flex items-center gap-4 text-gray-500">
+            <Link to="/admin" className="hover:text-primary-dark transition-colors">بوابة المشتركين</Link>
+            <span>•</span>
+            <a
+              href={whatsappLink('مرحباً، أحتاج إلى الدعم الفني لباركودي')}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary-dark transition-colors"
+            >
+              الدعم الفني
+            </a>
+          </div>
         </div>
       </footer>
 
+      <ScrollArrows />
     </div>
   );
 }

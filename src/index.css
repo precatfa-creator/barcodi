@@ -1,12 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Zain:wght@200;300;400;700;800;900&family=El+Messiri:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Cairo", system-ui, sans-serif;
+  --font-sans: "Zain", system-ui, sans-serif;
+  --font-display: "El Messiri", "Zain", system-ui, sans-serif;
   --color-primary-dark: #35858E;
   --color-primary-main: #7DA78C;
   --color-primary-light: #C2D099;
   --color-primary-pale: #E6EEC9;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 @keyframes laser-sweep {
@@ -66,6 +71,13 @@
   animation: gradient-pan 4s linear infinite alternate;
 }
 
+/* Autoplay progress on the active "Why Barcodi" tab */
+@keyframes progress-grow {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+.animate-progress { animation: progress-grow 5s linear both; }
+
 /* Scroll reveal (toggled by a tiny IntersectionObserver in the page) */
 .reveal {
   opacity: 0;
@@ -79,8 +91,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   .animate-fade-in, .animate-fade-in-up, .animate-scale-up, .animate-slide-up,
-  .animate-float, .animate-gradient, .animate-laser {
+  .animate-float, .animate-gradient, .animate-laser, .animate-progress {
     animation: none !important;
   }
   .reveal { opacity: 1; transform: none; transition: none; }
@@ -88,6 +101,8 @@
 
 body {
   font-family: var(--font-sans);
+  /* El Messiri tops out at 700 — never fake heavier weights, use the real cut */
+  font-synthesis-weight: none;
   direction: rtl;
   background-color: #f8fafc;
   background-image: 
