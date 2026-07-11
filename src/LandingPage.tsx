@@ -75,14 +75,20 @@ function Eyebrow({ children }: { children: ReactNode }) {
 }
 
 // Slim phone chassis shared by the hero demo and the in-app screens gallery.
+// Real handset proportions: modern iPhones (incl. iPhone 17) run a ~19.5:9
+// display, so the screen area is locked to that ratio instead of collapsing
+// to whatever height the content happens to have.
 function PhoneFrame({ children, label }: { children: ReactNode; label?: string }) {
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="w-[300px] max-w-full rounded-[2.6rem] bg-gray-950 p-2.5 shadow-[0_30px_70px_-20px_rgba(16,42,46,0.45)]">
-        <div className="rounded-[2rem] overflow-hidden bg-[#f3f6f2] relative">
-          {/* Speaker notch */}
-          <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-16 h-1.5 rounded-full bg-gray-900/80 z-20" />
-          {children}
+      <div className="w-[280px] max-w-full rounded-[3rem] bg-gray-950 p-2 shadow-[0_30px_70px_-20px_rgba(16,42,46,0.45)] ring-1 ring-gray-800">
+        <div className="rounded-[2.5rem] overflow-hidden bg-[#f3f6f2] relative aspect-[9/19.5]">
+          {/* Dynamic Island */}
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 w-24 h-6 rounded-full bg-gray-950 z-20" />
+          {/* Home indicator */}
+          <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-24 h-1 rounded-full bg-gray-900/25 z-20" />
+          {/* Stretch the single screen child to fill the full display */}
+          <div className="absolute inset-0 flex flex-col [&>*]:flex-1">{children}</div>
         </div>
       </div>
       {label && <span className="text-xs font-bold text-gray-500">{label}</span>}
@@ -117,7 +123,7 @@ function LiveScanDemo() {
 
   return (
     <PhoneFrame>
-      <div className="pt-8 pb-5 px-4 min-h-[480px] bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col gap-3" dir="rtl">
+      <div className="pt-11 pb-6 px-4 bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col gap-3" dir="rtl">
         {/* Store header, as the shopper sees it */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -742,7 +748,7 @@ export default function LandingPage() {
           {/* Screen 1 — the scanner */}
           <div className="reveal">
             <PhoneFrame label="الماسح الضوئي — يقرأ الباركود من الكاميرا مباشرة">
-              <div className="pt-8 pb-5 px-4 min-h-[440px] bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col gap-3" dir="rtl">
+              <div className="pt-11 pb-6 px-4 bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col gap-3" dir="rtl">
                 <div className="grid grid-cols-2 gap-1 bg-white/50 p-1 rounded-2xl border border-white">
                   <div className="py-2 rounded-xl text-[9px] font-bold bg-white text-primary-dark border border-primary-light/30 flex flex-col items-center gap-1">
                     <Barcode className="w-3.5 h-3.5" />
@@ -780,7 +786,7 @@ export default function LandingPage() {
           {/* Screen 2 — the product card */}
           <div className="reveal">
             <PhoneFrame label="بطاقة المنتج — الاسم والسعر والمواصفات فور القراءة">
-              <div className="pt-8 pb-5 px-4 min-h-[440px] bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col justify-center" dir="rtl">
+              <div className="pt-11 pb-6 px-4 bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col justify-center" dir="rtl">
                 <div className="bg-white/80 backdrop-blur-xl rounded-3xl border border-white p-4 shadow-[0_12px_40px_-5px_rgba(53,133,142,0.18)]">
                   <div className="flex items-center justify-between mb-3">
                     <span className="inline-flex items-center gap-1 bg-white/70 text-primary-dark text-[8px] font-bold px-2 py-1 rounded-full border border-white shadow-sm">
@@ -824,7 +830,7 @@ export default function LandingPage() {
           {/* Screen 3 — the smart cart */}
           <div className="reveal">
             <PhoneFrame label="السلة الذكية (اختيارية) — فعّلها أو أوقفها من لوحة التحكم">
-              <div className="pt-8 pb-5 px-4 min-h-[440px] bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col gap-3" dir="rtl">
+              <div className="pt-11 pb-6 px-4 bg-gradient-to-b from-[#eef4ee] via-[#f6f8f0] to-[#eaf1e6] flex flex-col gap-3" dir="rtl">
                 <div className="flex items-center justify-between mt-1">
                   <h4 className="font-black text-gray-900 text-sm font-display">سلة مشترياتي</h4>
                   <span className="text-[9px] bg-white border border-gray-200 text-gray-600 font-bold px-2 py-0.5 rounded-lg">3 أصناف</span>
