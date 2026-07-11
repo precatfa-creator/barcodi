@@ -357,8 +357,11 @@ function WhyShowcase({ items }: { items: Benefit[] }) {
   );
 }
 
+type BillingCycle = 'monthly' | 'semiannual' | 'yearly';
+
 export default function LandingPage() {
   const [activeFaq, setActiveFaq] = useState<number | null>(0);
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly');
   useScrollReveal();
 
   const heroStats = [
@@ -444,12 +447,61 @@ export default function LandingPage() {
     },
   ];
 
+  // Starter-plan billing cycles. Longer commitments price lower per month.
+  const starterBilling: Record<BillingCycle, { price: string; note: string; save?: string; whatsappMsg: string }> = {
+    monthly: {
+      price: '499',
+      note: 'دون التزام طويل — جدّد شهراً بشهر',
+      whatsappMsg: 'مرحباً، أرغب في الاشتراك الشهري في باقة الانطلاق من باركودي',
+    },
+    semiannual: {
+      price: '449',
+      note: 'تُدفع 2,694 د.ل كل ستة أشهر',
+      save: 'وفّر 10%',
+      whatsappMsg: 'مرحباً، أرغب في الاشتراك النصف سنوي (6 أشهر) في باقة الانطلاق من باركودي',
+    },
+    yearly: {
+      price: '399',
+      note: 'تُدفع 4,788 د.ل مرة واحدة سنوياً',
+      save: 'وفّر 20%',
+      whatsappMsg: 'مرحباً، أرغب في الاشتراك السنوي في باقة الانطلاق من باركودي',
+    },
+  };
+
+  const billingOptions: Array<{ id: BillingCycle; label: string; tag?: string }> = [
+    { id: 'monthly', label: 'شهري' },
+    { id: 'semiannual', label: 'كل 6 أشهر', tag: '-10%' },
+    { id: 'yearly', label: 'سنوي', tag: '-20%' },
+  ];
+
   const pricePlans = [
+    {
+      name: 'التجربة المجانية',
+      badge: 'جرّب قبل أن تلتزم',
+      price: '0',
+      period: 'د.ل / حتى 7 أيام',
+      priceNote: 'دون بطاقة دفع ودون أي التزام',
+      priceSave: undefined as string | undefined,
+      description: 'جرّب باركودي داخل متجرك بكامل مزايا باقة الانطلاق لمدة تصل إلى سبعة أيام.',
+      features: [
+        'كامل مزايا باقة الانطلاق دون استثناء',
+        'إعداد متجرك ورمز QR خلال دقائق',
+        'إلغاء تلقائي بانتهاء المدة — دون رسوم',
+        'انتقل إلى الباقة المدفوعة متى شئت',
+      ],
+      aiAddons: [] as string[],
+      popular: false,
+      comingSoon: false,
+      buttonText: 'ابدأ تجربتك المجانية',
+      whatsappMsg: 'مرحباً، أرغب في تجربة باركودي مجاناً لمدة 7 أيام في متجري',
+    },
     {
       name: 'باقة الانطلاق',
       badge: 'للمتاجر الصاعدة',
-      price: '499',
+      price: starterBilling[billingCycle].price,
       period: 'د.ل / شهرياً',
+      priceNote: starterBilling[billingCycle].note,
+      priceSave: starterBilling[billingCycle].save,
       description: 'كل ما يحتاجه متجرك ليقدّم خدمة استعلام الأسعار الذاتية من اليوم الأول.',
       features: [
         'رمز QR مخصّص لمتجرك جاهز للطباعة',
@@ -459,15 +511,18 @@ export default function LandingPage() {
         'دعم فني عبر واتساب',
       ],
       aiAddons: [] as string[],
-      popular: false,
+      popular: true,
+      comingSoon: false,
       buttonText: 'ابدأ مع باقة الانطلاق',
-      whatsappMsg: 'مرحباً، أرغب في الاشتراك في باقة الانطلاق من باركودي',
+      whatsappMsg: starterBilling[billingCycle].whatsappMsg,
     },
     {
       name: 'الباقة الاحترافية',
       badge: 'للمتاجر الكبرى والفروع',
       price: '699',
       period: 'د.ل / شهرياً',
+      priceNote: undefined as string | undefined,
+      priceSave: undefined as string | undefined,
       description: 'قدرات كاملة مع إضافات الذكاء الاصطناعي التي تحوّل كل عملية مسح إلى فرصة بيع.',
       features: [
         'شعار وهوية مخصّصة لمتجرك وفروعه',
@@ -481,9 +536,10 @@ export default function LandingPage() {
         'اقتراح منتجات مكمّلة ترفع قيمة السلة',
         'تنبيهات عروض لحظية أمام الرفّ',
       ],
-      popular: true,
-      buttonText: 'اشترك في الاحترافية',
-      whatsappMsg: 'مرحباً، أرغب في الاشتراك في الباقة الاحترافية من باركودي',
+      popular: false,
+      comingSoon: true,
+      buttonText: 'متاحة قريباً',
+      whatsappMsg: 'مرحباً، أرغب بأن يتم إشعاري عند إطلاق الباقة الاحترافية من باركودي',
     },
   ];
 
@@ -502,7 +558,11 @@ export default function LandingPage() {
     },
     {
       q: 'ما المقصود بالاقتراحات الذكية في الباقة الاحترافية؟',
-      a: 'حين يمسح العميل منتجاً — عبوة نوتيلا مثلاً — يعرض له النظام وصفات يدخل فيها ذلك المنتج، ومنتجات مكمّلة تُشترى معه عادةً، وعروض المتجر عليه في تلك اللحظة. هكذا تتحوّل كل عملية استعلام عن سعر إلى فرصة بيع إضافية.',
+      a: 'حين يمسح العميل منتجاً — عبوة نوتيلا مثلاً — يعرض له النظام وصفات يدخل فيها ذلك المنتج، ومنتجات مكمّلة تُشترى معه عادةً، وعروض المتجر عليه في تلك اللحظة. هكذا تتحوّل كل عملية استعلام عن سعر إلى فرصة بيع إضافية. الباقة الاحترافية وإضافات الذكاء الاصطناعي قيد الإطلاق حالياً وستتوفر قريباً.',
+    },
+    {
+      q: 'كيف تعمل التجربة المجانية؟',
+      a: 'تتواصل معنا عبر واتساب فنجهّز متجرك ورمز QR الخاص بك خلال دقائق، وتستخدم كامل مزايا باقة الانطلاق مجاناً لمدة تصل إلى سبعة أيام. لا نطلب بطاقة دفع، وبانتهاء المدة تختار بنفسك: الاشتراك في باقة مدفوعة أو التوقف دون أي رسوم.',
     },
     {
       q: 'هل سلة التسوق الذكية إلزامية في متجري؟',
@@ -817,6 +877,7 @@ export default function LandingPage() {
               <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-[11px] font-bold tracking-wide text-primary-pale">
                 <Sparkles className="w-3.5 h-3.5" />
                 إضافات الذكاء الاصطناعي — حصرياً في الباقة الاحترافية
+                <span className="text-[10px] font-black bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 rounded-full">قريباً</span>
               </span>
               <h2 className="font-display text-3xl md:text-5xl font-black mt-6 leading-tight tracking-tight">
                 كل عملية مسح... فرصة بيع جديدة
@@ -829,8 +890,11 @@ export default function LandingPage() {
             <div className="grid md:grid-cols-3 gap-5">
               {aiFeatures.map((feat) => (
                 <div key={feat.title} className="rounded-3xl border border-white/15 bg-white/5 backdrop-blur-sm p-6 text-right hover:bg-white/10 transition-colors">
-                  <div className="w-11 h-11 rounded-2xl bg-primary-pale/20 text-primary-pale flex items-center justify-center mb-4">
-                    <feat.icon className="w-5.5 h-5.5" />
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-11 h-11 rounded-2xl bg-primary-pale/20 text-primary-pale flex items-center justify-center">
+                      <feat.icon className="w-5.5 h-5.5" />
+                    </div>
+                    <span className="text-[10px] font-black bg-white/10 border border-white/20 text-white/80 px-2.5 py-1 rounded-full">قريباً</span>
                   </div>
                   <h3 className="text-lg font-black mb-2 font-display">{feat.title}</h3>
                   <p className="text-xs text-white/60 font-medium leading-relaxed">{feat.desc}</p>
@@ -846,14 +910,42 @@ export default function LandingPage() {
         <div className="max-w-2xl mb-14 text-right">
           <Eyebrow>خطط الأسعار</Eyebrow>
           <h2 className="font-display text-3xl md:text-5xl font-black text-gray-950 mt-5 leading-tight tracking-tight">
-            باقتان واضحتان، دون تكاليف خفية
+            ابدأ مجاناً، وأسعار واضحة دون تكاليف خفية
           </h2>
           <p className="text-base md:text-lg text-gray-500 mt-4 font-medium leading-relaxed">
-            اختر ما يناسب حجم متجرك اليوم، ورقِّ باقتك متى شئت. الأسعار بالدينار الليبي.
+            جرّب باركودي مجاناً حتى 7 أيام، ثم اختر ما يناسب حجم متجرك. الأسعار بالدينار الليبي.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-5 items-stretch max-w-4xl">
+        {/* Billing cycle toggle — applies to باقة الانطلاق */}
+        <div className="flex flex-wrap items-center gap-2 mb-8">
+          <span className="text-xs font-black text-gray-500 ml-2">دورة الفوترة:</span>
+          {billingOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setBillingCycle(option.id)}
+              className={`px-4 py-2 rounded-full text-xs font-black transition-all flex items-center gap-1.5 ${
+                billingCycle === option.id
+                  ? 'bg-primary-dark text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <span>{option.label}</span>
+              {option.tag && (
+                <span
+                  className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+                    billingCycle === option.id ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'
+                  }`}
+                >
+                  {option.tag}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-5 items-stretch">
           {pricePlans.map((plan) => (
             <div
               key={plan.name}
@@ -863,6 +955,11 @@ export default function LandingPage() {
                   : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
             >
+              {plan.comingSoon && (
+                <span className="absolute -top-3 left-6 bg-gray-950 text-white text-[10px] font-black px-3.5 py-1.5 rounded-full shadow-sm">
+                  قريباً
+                </span>
+              )}
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xl font-black text-gray-950 font-display">{plan.name}</h3>
@@ -871,9 +968,19 @@ export default function LandingPage() {
 
                 <p className="text-xs text-gray-500 font-medium leading-relaxed min-h-[48px]">{plan.description}</p>
 
-                <div className="flex items-baseline gap-2 pb-5 border-b border-gray-100">
-                  <span className="text-4xl font-black text-gray-950 font-mono tracking-tight">{plan.price}</span>
-                  <span className="text-xs text-gray-400 font-bold">{plan.period}</span>
+                <div className="pb-5 border-b border-gray-100 space-y-1.5">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-black text-gray-950 font-mono tracking-tight">{plan.price}</span>
+                    <span className="text-xs text-gray-400 font-bold">{plan.period}</span>
+                    {plan.priceSave && (
+                      <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full mr-1">
+                        {plan.priceSave}
+                      </span>
+                    )}
+                  </div>
+                  {plan.priceNote && (
+                    <p className="text-[11px] text-gray-400 font-bold">{plan.priceNote}</p>
+                  )}
                 </div>
 
                 <ul className="space-y-3 text-xs text-gray-700 font-medium">
@@ -892,6 +999,7 @@ export default function LandingPage() {
                     <div className="flex items-center gap-1.5 mb-3">
                       <Sparkles className="w-4 h-4 text-primary-dark" />
                       <span className="text-xs font-black text-primary-dark">إضافات الذكاء الاصطناعي</span>
+                      <span className="text-[10px] font-black bg-gray-950 text-white px-2 py-0.5 rounded-full mr-auto">قريباً</span>
                     </div>
                     <ul className="space-y-2.5 text-xs text-gray-700 font-medium">
                       {plan.aiAddons.map((addon) => (
@@ -907,18 +1015,24 @@ export default function LandingPage() {
                 )}
               </div>
 
-              <a
-                href={whatsappLink(plan.whatsappMsg)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`mt-8 w-full py-3.5 px-4 rounded-full text-center font-black text-sm block transition-all active:scale-[0.99] ${
-                  plan.popular
-                    ? 'bg-primary-dark text-white hover:bg-primary-dark/90'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-                }`}
-              >
-                {plan.buttonText}
-              </a>
+              {plan.comingSoon ? (
+                <span className="mt-8 w-full py-3.5 px-4 rounded-full text-center font-black text-sm block bg-gray-100 text-gray-400 cursor-default select-none">
+                  {plan.buttonText}
+                </span>
+              ) : (
+                <a
+                  href={whatsappLink(plan.whatsappMsg)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`mt-8 w-full py-3.5 px-4 rounded-full text-center font-black text-sm block transition-all active:scale-[0.99] ${
+                    plan.popular
+                      ? 'bg-primary-dark text-white hover:bg-primary-dark/90'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                  }`}
+                >
+                  {plan.buttonText}
+                </a>
+              )}
             </div>
           ))}
         </div>
