@@ -1,13 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Camera, AlertTriangle } from 'lucide-react';
-import { BarcodeCameraScanner, listCameras } from '../lib/barcodeScanner';
-
-const scoreLabel = (label: string) => {
-  const l = label.toLowerCase();
-  if (/back|rear|environment|wide|خلف|خلفية/.test(l)) return 4;
-  if (/front|user|selfie|أمام|امام/.test(l)) return 0;
-  return 1;
-};
+import { BarcodeCameraScanner, listCameras, scoreCameraLabel } from '../lib/barcodeScanner';
 
 interface Props {
   onClose: () => void;
@@ -43,7 +36,7 @@ export default function BarcodeScanModal({ onClose, onDetected }: Props) {
         let deviceId = '';
         try {
           const cams = await listCameras();
-          const sorted = [...cams].sort((a, b) => scoreLabel(b.label) - scoreLabel(a.label));
+          const sorted = [...cams].sort((a, b) => scoreCameraLabel(b.label) - scoreCameraLabel(a.label));
           deviceId = sorted[0]?.id || '';
         } catch {
           // fall through to facingMode

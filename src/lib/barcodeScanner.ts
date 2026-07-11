@@ -44,6 +44,24 @@ export const SCAN_FORMATS: BarcodeFormat[] = [
 
 export type CameraDevice = { id: string; label: string };
 
+/**
+ * Rank cameras so the main rear sensor sorts first. Secondary rear lenses
+ * (ultrawide/telephoto/macro/depth) usually have no torch and can't focus
+ * close enough for barcodes, so they rank below the plain back camera even
+ * though they are rear-facing.
+ */
+export const scoreCameraLabel = (label: string) => {
+  const normalized = label.toLowerCase();
+  let score = 1;
+  if (/back|rear|environment|خلف|خلفية/.test(normalized)) score = 4;
+  else if (/camera\s*0|camera1|0/.test(normalized)) score = 2;
+  if (/front|user|selfie|أمام|امام/.test(normalized)) return 0;
+  if (score === 4 && /ultra|wide|tele|zoom|macro|depth|infrared/.test(normalized)) score = 3;
+  // "camera 0" is almost always the main sensor on Android.
+  if (score >= 3 && /camera2?\s*0/.test(normalized)) score = 5;
+  return score;
+};
+
 interface DetectorLike {
   detect(source: ImageBitmapSource): Promise<DetectedBarcode[]>;
 }
@@ -170,7 +188,12 @@ export class BarcodeCameraScanner {
   async setTorch(on: boolean): Promise<void> {
     const track = this.getTrack();
     if (!track) throw new Error('No active video track');
-    await track.applyConstraints({ advanced: [{ torch: on } as any] });
+    try {
+      await track.applyConstraints({ advanced: [{ torch: on } as any] });
+    } catch {
+      // Some browsers reject the `advanced` form but accept torch directly.
+      await track.applyConstraints({ torch: on } as any);
+    }
   }
 
   async stop(): Promise<void> {
