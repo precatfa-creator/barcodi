@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Camera, Barcode, AlertTriangle, CornerDownLeft, Sparkles, Zap, ZapOff, FlipHorizontal } from 'lucide-react';
 import { Product, AppSettings } from '../types';
-import { BarcodeCameraScanner, listCameras, type CameraDevice } from '../lib/barcodeScanner';
+import { BarcodeCameraScanner, listCameras, scoreCameraLabel, type CameraDevice } from '../lib/barcodeScanner';
 
 interface ScannerTabProps {
   storeId: string;
@@ -14,14 +14,6 @@ interface ScannerTabProps {
   settings: AppSettings;
   isPaused?: boolean;
 }
-
-const scoreCameraLabel = (label: string) => {
-  const normalized = label.toLowerCase();
-  if (/back|rear|environment|wide|خلف|خلفية/.test(normalized)) return 4;
-  if (/camera\s*0|camera1|0/.test(normalized)) return 2;
-  if (/front|user|selfie|أمام|امام/.test(normalized)) return 0;
-  return 1;
-};
 
 export function playBeepSound() {
   try {
@@ -372,7 +364,7 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
       setIsFlashlightOn(false);
       setHasFlashlight(false);
       setFlashlightSupportKnown(true);
-      setCameraError('هذا الجهاز أو المتصفح لا يسمح بتشغيل الفلاش من صفحة الويب. جرّب تحسين الإضاءة أو استخدم الإدخال اليدوي.');
+      setCameraError('تعذّر تشغيل الفلاش على هذه الكاميرا. جرّب زر تبديل الكاميرا أعلى الشاشة — بعض العدسات الخلفية لا تملك فلاشاً — أو حسّن الإضاءة. (متصفح iPhone لا يسمح بتشغيل الفلاش من صفحات الويب)');
     }
   };
 

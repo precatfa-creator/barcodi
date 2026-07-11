@@ -178,6 +178,9 @@ type StoreRecord = {
   products: ProductRecord[];
   visits?: number;
   suspended?: boolean;
+  // Purchase-list (cart) feature toggle. Undefined means enabled so existing
+  // stores keep their current behavior without a data migration.
+  cartEnabled?: boolean;
 };
 
 type ProductRecord = {
@@ -357,6 +360,7 @@ const storeHash = (store: StoreRecord) =>
         products: store.products || [],
         visits: store.visits || 0,
         suspended: Boolean(store.suspended),
+        cartEnabled: store.cartEnabled !== false,
       })
     )
     .digest('hex');
@@ -379,6 +383,7 @@ const storeToSupabaseRow = (store: StoreRecord) => ({
   store_logo: store.storeLogo || '',
   visits: store.visits || 0,
   suspended: Boolean(store.suspended),
+  cart_enabled: store.cartEnabled !== false,
 });
 
 const supabaseRowToStore = (row: any): StoreRecord | null => {
@@ -392,6 +397,7 @@ const supabaseRowToStore = (row: any): StoreRecord | null => {
     products: [], // hydrated from the products table
     visits: Number.isFinite(Number(row.visits)) ? Number(row.visits) : 0,
     suspended: Boolean(row.suspended),
+    cartEnabled: row.cart_enabled !== false,
   };
 };
 
@@ -471,6 +477,7 @@ const getPublicStorePayload = (store: StoreRecord) => ({
   storeLogo: store.storeLogo,
   visits: store.visits || 0,
   suspended: Boolean(store.suspended),
+  cartEnabled: store.cartEnabled !== false,
 });
 
 const writeStoreEvent = (client: StoreEventClient, event: string, data: unknown) => {
@@ -903,6 +910,7 @@ app.get('/api/public/store/:storeId', publicApiLimiter, (req, res) => {
       storeName: store.storeName,
       storeLogo: store.storeLogo,
       suspended: Boolean(store.suspended),
+      cartEnabled: store.cartEnabled !== false,
     });
   } else {
     res.status(404).json({ error: 'Store not found' });
@@ -1010,7 +1018,7 @@ app.get('/api/public/store/:storeId/product/:barcode', publicApiLimiter, async (
 app.get('/api/admin/store', authenticateToken, (req, res) => {
   const store = db.stores[(req as any).user.storeId];
   if (store) {
-    res.json({ storeId: store.id, storeName: store.storeName, storeLogo: store.storeLogo, username: store.username, visits: store.visits || 0 });
+    res.json({ storeId: store.id, storeName: store.storeName, storeLogo: store.storeLogo, username: store.username, visits: store.visits || 0, cartEnabled: store.cartEnabled !== false });
   } else {
     res.status(404).json({ error: 'Not found' });
   }
@@ -1159,15 +1167,19 @@ app.put('/api/admin/store', authenticateToken, async (req, res) => {
   if (req.body.storeLogo !== undefined && storeLogo === null) {
     return res.status(400).json({ error: 'Invalid store logo' });
   }
+  if (req.body.cartEnabled !== undefined && typeof req.body.cartEnabled !== 'boolean') {
+    return res.status(400).json({ error: 'Invalid cartEnabled value' });
+  }
 
   if (storeName !== undefined) db.stores[storeId].storeName = storeName;
   if (storeLogo !== undefined) db.stores[storeId].storeLogo = storeLogo;
+  if (req.body.cartEnabled !== undefined) db.stores[storeId].cartEnabled = req.body.cartEnabled;
   const ok = await persistStoreNow(storeId);
   if (!ok) {
     return res.status(503).json({ error: 'تعذّر حفظ الإعدادات، يرجى المحاولة مرة أخرى' });
   }
   broadcastStoreUpdate(storeId);
-  res.json({ success: true, storeName: db.stores[storeId].storeName, storeLogo: db.stores[storeId].storeLogo });
+  res.json({ success: true, storeName: db.stores[storeId].storeName, storeLogo: db.stores[storeId].storeLogo, cartEnabled: db.stores[storeId].cartEnabled !== false });
 });
 
 // API: Upload Products (Admin)

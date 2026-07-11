@@ -120,6 +120,15 @@ export default function App() {
 
   const isEng = settings.language === 'en';
 
+  // Per-store purchase-list toggle: when off, the app is a pure price checker.
+  const cartEnabled = storeSettings.cartEnabled !== false;
+
+  useEffect(() => {
+    if (!cartEnabled && activeTab === 'cart') {
+      setActiveTab('scan');
+    }
+  }, [cartEnabled, activeTab]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center text-primary-main" dir={isEng ? 'ltr' : 'rtl'}>
@@ -201,6 +210,7 @@ export default function App() {
                     onAddToCart={handleAddToCart}
                     currentCartQty={cart.find((i) => i.product.id === scannedProduct.id)?.quantity || 0}
                     onDismiss={() => setScannedProduct(null)}
+                    cartEnabled={cartEnabled}
                   />
                 )}
                 <div className={scannedProduct ? 'hidden' : 'block'}>
@@ -214,7 +224,7 @@ export default function App() {
               </div>
             )}
 
-            {activeTab === 'cart' && (
+            {activeTab === 'cart' && cartEnabled && (
               /* Cart Calculation Tab */
               <CartTab
                 cart={cart}
@@ -278,6 +288,7 @@ export default function App() {
               </div>
 
               {/* Cart Tab Button */}
+              {cartEnabled && (
               <button
                 onClick={() => {
                   setScannedProduct(null);
@@ -299,6 +310,7 @@ export default function App() {
                 </div>
                 <span className="text-[10px] font-bold">{isEng ? 'Cart' : 'السلة'}</span>
               </button>
+              )}
 
             </div>
           </div>

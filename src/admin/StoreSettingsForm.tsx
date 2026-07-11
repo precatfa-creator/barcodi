@@ -1,5 +1,5 @@
 import { useState, FormEvent, useRef, useEffect, type ChangeEvent } from 'react';
-import { Store, Save, Image as ImageIcon, Upload } from 'lucide-react';
+import { Store, Save, Image as ImageIcon, Upload, ShoppingBag } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 import ChangePasswordCard from './ChangePasswordCard';
 
@@ -9,14 +9,19 @@ export default function StoreSettingsForm() {
   const [formData, setFormData] = useState({
     name: storeSettings.name,
     logoUrl: storeSettings.logoUrl || '',
+    cartEnabled: storeSettings.cartEnabled !== false,
   });
 
   // Store data loads asynchronously after this form first mounts. Re-sync the
   // local form fields when it arrives, otherwise the inputs stay stuck on the
   // "جاري التحميل..." placeholder until the user navigates away and back.
   useEffect(() => {
-    setFormData({ name: storeSettings.name, logoUrl: storeSettings.logoUrl || '' });
-  }, [storeSettings.name, storeSettings.logoUrl]);
+    setFormData({
+      name: storeSettings.name,
+      logoUrl: storeSettings.logoUrl || '',
+      cartEnabled: storeSettings.cartEnabled !== false,
+    });
+  }, [storeSettings.name, storeSettings.logoUrl, storeSettings.cartEnabled]);
 
   const [savedMessage, setSavedMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -47,7 +52,8 @@ export default function StoreSettingsForm() {
     setStoreSettings({
       name: formData.name,
       logoUrl: formData.logoUrl || null,
-      visits: storeSettings.visits
+      visits: storeSettings.visits,
+      cartEnabled: formData.cartEnabled
     });
     setSavedMessage('تم حفظ الإعدادات بنجاح!');
     setTimeout(() => setSavedMessage(''), 3000);
@@ -123,6 +129,46 @@ export default function StoreSettingsForm() {
              </div>
            </div>
         </div>
+        <div>
+          <label className="block text-sm font-bold text-gray-700 mb-2">قائمة المشتريات (السلة)</label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={formData.cartEnabled}
+            onClick={() => setFormData({ ...formData, cartEnabled: !formData.cartEnabled })}
+            className={`w-full flex items-center justify-between gap-4 p-4 rounded-xl border transition-all text-right ${
+              formData.cartEnabled
+                ? 'bg-primary-light/10 border-primary-light/40'
+                : 'bg-gray-50 border-gray-200'
+            }`}
+          >
+            <span className="flex items-center gap-3">
+              <span className={`p-2.5 rounded-lg ${formData.cartEnabled ? 'bg-primary-light/30 text-primary-dark' : 'bg-gray-200 text-gray-500'}`}>
+                <ShoppingBag className="w-5 h-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-bold text-gray-900">
+                  {formData.cartEnabled ? 'قائمة المشتريات مفعّلة' : 'قائمة المشتريات موقوفة'}
+                </span>
+                <span className="block text-xs text-gray-500 mt-0.5 leading-relaxed">
+                  عند الإيقاف يصبح التطبيق قارئ أسعار فقط: يظهر سعر المنتج دون إمكانية إضافته لقائمة المشتريات.
+                </span>
+              </span>
+            </span>
+            <span
+              className={`relative shrink-0 w-12 h-7 rounded-full transition-colors ${
+                formData.cartEnabled ? 'bg-primary-dark' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${
+                  formData.cartEnabled ? 'right-1' : 'right-6'
+                }`}
+              />
+            </span>
+          </button>
+        </div>
+
         <div className="pt-4 flex items-center justify-between">
           <button
             type="submit"
