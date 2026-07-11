@@ -1,19 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { X, Camera, AlertTriangle } from 'lucide-react';
-
-const SCAN_REGION_ID = 'admin-barcode-scan-region';
-
-const formats = [
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
-  Html5QrcodeSupportedFormats.UPC_A,
-  Html5QrcodeSupportedFormats.UPC_E,
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.CODE_93,
-  Html5QrcodeSupportedFormats.ITF,
-];
+import { BarcodeCameraScanner, listCameras } from '../lib/barcodeScanner';
 
 const scoreLabel = (label: string) => {
   const l = label.toLowerCase();
@@ -28,7 +15,8 @@ interface Props {
 }
 
 export default function BarcodeScanModal({ onClose, onDetected }: Props) {
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const scannerRef = useRef<BarcodeCameraScanner | null>(null);
   const handledRef = useRef(false);
   const [error, setError] = useState('');
 
@@ -40,43 +28,31 @@ export default function BarcodeScanModal({ onClose, onDetected }: Props) {
         setError('الكاميرا تحتاج اتصالاً آمناً (HTTPS). يمكنك إدخال الباركود يدوياً.');
         return;
       }
+      const videoElement = videoRef.current;
+      if (!videoElement) return;
+
       try {
-        const scanner = new Html5Qrcode(SCAN_REGION_ID, {
-          formatsToSupport: formats,
-          useBarCodeDetectorIfSupported: true,
-          verbose: false,
+        const scanner = new BarcodeCameraScanner(videoElement, (text: string) => {
+          if (handledRef.current) return;
+          handledRef.current = true;
+          onDetected(text.trim());
         });
         scannerRef.current = scanner;
 
         // Prefer the rear camera by deviceId (most reliable across browsers).
         let deviceId = '';
         try {
-          const cams = await Html5Qrcode.getCameras();
-          const sorted = [...cams].sort((a, b) => scoreLabel(b.label || '') - scoreLabel(a.label || ''));
+          const cams = await listCameras();
+          const sorted = [...cams].sort((a, b) => scoreLabel(b.label) - scoreLabel(a.label));
           deviceId = sorted[0]?.id || '';
         } catch {
           // fall through to facingMode
         }
         if (cancelled) return;
 
-        const config = {
-          fps: 15,
-          qrbox: (w: number, h: number) => {
-            const width = Math.floor(Math.min(w * 0.82, 300));
-            return { width, height: Math.floor(Math.min(h * 0.5, width * 0.6)) };
-          },
-        };
-
-        const onScan = (text: string) => {
-          if (handledRef.current) return;
-          handledRef.current = true;
-          onDetected(text.trim());
-        };
-
-        const source: any = deviceId || { facingMode: { ideal: 'environment' } };
-        await scanner.start(source, config, onScan, () => {});
+        await scanner.start(deviceId ? { deviceId } : { facingMode: 'environment' });
         if (cancelled) {
-          try { await scanner.stop(); } catch {}
+          await scanner.stop();
         }
       } catch {
         if (!cancelled) {
@@ -89,19 +65,9 @@ export default function BarcodeScanModal({ onClose, onDetected }: Props) {
 
     return () => {
       cancelled = true;
-      const s = scannerRef.current;
+      const scanner = scannerRef.current;
       scannerRef.current = null;
-      if (s) {
-        try {
-          if (s.isScanning) {
-            s.stop().then(() => { try { s.clear(); } catch {} }).catch(() => {});
-          } else {
-            s.clear();
-          }
-        } catch {
-          // container may already be gone
-        }
-      }
+      scanner?.stop().catch(() => {});
     };
   }, [onDetected]);
 
@@ -125,7 +91,9 @@ export default function BarcodeScanModal({ onClose, onDetected }: Props) {
           </div>
         ) : (
           <>
-            <div id={SCAN_REGION_ID} className="w-full overflow-hidden rounded-2xl bg-black aspect-square" />
+            <div className="w-full overflow-hidden rounded-2xl bg-black aspect-square">
+              <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
+            </div>
             <p className="text-xs text-gray-500 font-medium text-center mt-3">وجّه الكاميرا نحو الباركود لقراءته تلقائياً.</p>
           </>
         )}

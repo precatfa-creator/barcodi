@@ -4,9 +4,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Camera, Barcode, AlertTriangle, CornerDownLeft, Sparkles, Zap, ZapOff, FlipHorizontal } from 'lucide-react';
 import { Product, AppSettings } from '../types';
+import { BarcodeCameraScanner, listCameras, type CameraDevice } from '../lib/barcodeScanner';
 
 interface ScannerTabProps {
   storeId: string;
@@ -15,24 +15,6 @@ interface ScannerTabProps {
   isPaused?: boolean;
 }
 
-type CameraDevice = {
-  id: string;
-  label: string;
-};
-
-const SCANNER_ELEMENT_ID = 'camera-viewfinder-output';
-
-const barcodeFormats = [
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
-  Html5QrcodeSupportedFormats.UPC_A,
-  Html5QrcodeSupportedFormats.UPC_E,
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.CODE_93,
-  Html5QrcodeSupportedFormats.ITF,
-];
-
 const scoreCameraLabel = (label: string) => {
   const normalized = label.toLowerCase();
   if (/back|rear|environment|wide|خلف|خلفية/.test(normalized)) return 4;
@@ -40,29 +22,6 @@ const scoreCameraLabel = (label: string) => {
   if (/front|user|selfie|أمام|امام/.test(normalized)) return 0;
   return 1;
 };
-
-const isAbortLikeMediaError = (err: any) => {
-  const msg = String(err?.message || err || '');
-  return err?.name === 'AbortError' || msg.includes('interrupted') || msg.includes('removed');
-};
-
-// html5-qrcode can trigger benign media play interruption promises during rapid
-// React unmount/remount cycles. Suppress only that known browser noise.
-if (typeof window !== 'undefined' && window.HTMLMediaElement && !(window as any).__barcodiPlayPatched) {
-  const originalPlay = window.HTMLMediaElement.prototype.play;
-  window.HTMLMediaElement.prototype.play = function (...args) {
-    const promise = originalPlay.apply(this, args);
-    if (promise instanceof Promise) {
-      promise.catch((err) => {
-        if (!isAbortLikeMediaError(err)) {
-          console.warn('HTMLMediaElement.play() rejected:', err);
-        }
-      });
-    }
-    return promise;
-  };
-  (window as any).__barcodiPlayPatched = true;
-}
 
 export function playBeepSound() {
   try {
@@ -95,7 +54,8 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
   const storeIdRef = useRef(storeId);
   storeIdRef.current = storeId;
 
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const scannerRef = useRef<BarcodeCameraScanner | null>(null);
   const mountedRef = useRef(true);
   const startingRef = useRef(false);
   const startTimerRef = useRef<number | null>(null);
@@ -138,24 +98,11 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
     scannerRef.current = null;
     if (scanner) {
       try {
-        if (scanner.isScanning) {
-          await scanner.stop();
-        }
+        await scanner.stop();
       } catch (err) {
-        if (!isAbortLikeMediaError(err)) {
-          console.warn('Scanner stop failed:', err);
-        }
-      }
-
-      try {
-        scanner.clear();
-      } catch {
-        // The container may already be gone during route changes.
+        console.warn('Scanner stop failed:', err);
       }
     }
-
-    const container = document.getElementById(SCANNER_ELEMENT_ID);
-    if (container) container.innerHTML = '';
 
     setIsCameraReady(false);
     setIsFlashlightOn(false);
@@ -163,9 +110,9 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
     setFlashlightSupportKnown(false);
   }, []);
 
-  const probeTorchOnce = (scanner: Html5Qrcode) => {
+  const probeTorchOnce = (scanner: BarcodeCameraScanner) => {
     try {
-      const track = (scanner as any).getRunningTrack?.();
+      const track = scanner.getTrack();
       const caps = track?.getCapabilities?.() || {};
       if ('torch' in caps) {
         setFlashlightSupportKnown(true);
@@ -178,7 +125,7 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
     return false;
   };
 
-  const markTorchCapability = (scanner: Html5Qrcode) => {
+  const markTorchCapability = (scanner: BarcodeCameraScanner) => {
     // Some devices (notably Samsung/Chrome) don't expose the `torch` capability
     // immediately after the camera starts — it appears a moment later. So probe
     // now and again after the stream settles before deciding. Until we know, we
@@ -250,10 +197,8 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
 
   const refreshCameras = useCallback(async () => {
     try {
-      const devices = await Html5Qrcode.getCameras();
-      const ordered = [...devices]
-        .map((device) => ({ id: device.id, label: device.label || '' }))
-        .sort((a, b) => scoreCameraLabel(b.label) - scoreCameraLabel(a.label));
+      const devices = await listCameras();
+      const ordered = [...devices].sort((a, b) => scoreCameraLabel(b.label) - scoreCameraLabel(a.label));
       setCameras(ordered);
       return ordered;
     } catch (err) {
@@ -281,39 +226,18 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
           return;
         }
 
-        const element = document.getElementById(SCANNER_ELEMENT_ID);
-        if (!element) return;
+        const videoElement = videoRef.current;
+        if (!videoElement) return;
 
         await stopCameraScanner();
         if (!mountedRef.current) return;
 
         startingRef.current = true;
 
-        const scanConfig = {
-          fps: 25,
-          qrbox: (viewWidth: number, viewHeight: number) => {
-            const width = Math.floor(Math.min(viewWidth * 0.78, 320));
-            const height = Math.floor(Math.min(viewHeight * 0.38, width * 0.55, 160));
-            return { width, height };
-          },
-          aspectRatio: 4 / 3,
-          disableFlip: false,
-        };
-
-        const scanSuccess = (decodedText: string) => {
-          handleBarcodeScanned(decodedText);
-        };
-
-        const scanError = (errorMessage: string) => {
-          if (errorMessage && !errorMessage.includes('NotFoundException')) {
-            console.debug('Scan frame warning:', errorMessage);
-          }
-        };
-
         // Resolve a concrete rear-camera deviceId first. Selecting by id is the
         // most reliable way to guarantee the back camera across browsers —
         // facingMode hints (even `exact`) are inconsistently honored and can
-        // fail outright on iOS. getCameras() also prompts for permission and
+        // fail outright on iOS. listCameras() also prompts for permission and
         // lets us score labels, so rear-facing cameras sort to the front.
         let preferredDeviceId = selectedCameraId;
         if (!preferredDeviceId) {
@@ -328,57 +252,47 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
 
         const strategies: Array<{
           name: string;
-          source: string | MediaTrackConstraints;
+          source: { deviceId?: string; facingMode?: 'environment' | 'user' };
         }> = [];
 
         // Primary: the resolved device id (single getUserMedia, no retry churn).
         if (preferredDeviceId) {
-          strategies.push({ name: 'preferred device', source: preferredDeviceId });
+          strategies.push({ name: 'preferred device', source: { deviceId: preferredDeviceId } });
         }
 
         // Fallback: facingMode hint, in case the device id is unavailable. We
         // only request the front camera when the user explicitly chose it.
         strategies.push({
           name: preferredFacingMode === 'environment' ? 'rear (facingMode)' : 'front (facingMode)',
-          source: { facingMode: { ideal: preferredFacingMode }, focusMode: { ideal: 'continuous' } } as MediaTrackConstraints,
+          source: { facingMode: preferredFacingMode },
         });
 
         // Last resort: any available camera.
         strategies.push({
           name: 'any camera fallback',
-          source: { facingMode: { ideal: 'environment' } } as MediaTrackConstraints,
+          source: { facingMode: 'environment' },
         });
 
-        let startedScanner: Html5Qrcode | null = null;
+        let startedScanner: BarcodeCameraScanner | null = null;
         let lastError: any = null;
 
         for (const strategy of strategies) {
           if (!mountedRef.current) break;
 
-          const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID, {
-            formatsToSupport: barcodeFormats,
-            useBarCodeDetectorIfSupported: true,
-            verbose: false,
-          });
+          const scanner = new BarcodeCameraScanner(videoElement, handleBarcodeScanned);
           scannerRef.current = scanner;
 
           try {
-            await scanner.start(strategy.source as any, scanConfig, scanSuccess, scanError);
+            await scanner.start(strategy.source);
             startedScanner = scanner;
             break;
           } catch (err: any) {
             lastError = err;
             console.warn(`Camera start strategy failed (${strategy.name}):`, err?.name || err, err?.message || '');
             try {
-              if (scanner.isScanning) await scanner.stop();
-            } catch {}
-            try {
-              scanner.clear();
+              await scanner.stop();
             } catch {}
             scannerRef.current = null;
-
-            const container = document.getElementById(SCANNER_ELEMENT_ID);
-            if (container) container.innerHTML = '';
           }
         }
 
@@ -392,8 +306,8 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
         markTorchCapability(startedScanner);
 
         // The camera list was already populated before starting; re-probing
-        // getCameras() while the stream is live can fail on some devices, so
-        // just record which camera we ended up on.
+        // enumerateDevices() while the stream is live can fail on some devices,
+        // so just record which camera we ended up on.
         setActiveCameraId(preferredDeviceId || selectedCameraId || '');
       } catch (err: any) {
         if (!mountedRef.current) return;
@@ -447,13 +361,8 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
     if (!scanner) return;
 
     try {
-      const track = (scanner as any).getRunningTrack?.();
-      if (!track) return;
-
       const nextState = !isFlashlightOn;
-      await track.applyConstraints({
-        advanced: [{ torch: nextState } as any],
-      });
+      await scanner.setTorch(nextState);
       setHasFlashlight(true);
       setFlashlightSupportKnown(true);
       setIsFlashlightOn(nextState);
@@ -550,9 +459,13 @@ export function ScannerTab({ storeId, onProductFound, settings, isPaused = false
 
           <div className="relative w-full aspect-[4/3] max-w-sm mx-auto bg-gray-950 rounded-3xl border-[6px] border-gray-900 shadow-inner overflow-hidden flex items-center justify-center">
             {showCamera && (
-              <div
-                id={SCANNER_ELEMENT_ID}
-                className="w-full h-full [&_video]:!w-full [&_video]:!h-full [&_video]:!object-cover [&_canvas]:hidden"
+              <video
+                ref={videoRef}
+                className="w-full h-full object-cover"
+                autoPlay
+                playsInline
+                muted
+                id="camera-viewfinder-output"
               />
             )}
 
