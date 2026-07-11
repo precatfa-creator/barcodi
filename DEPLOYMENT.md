@@ -21,6 +21,7 @@ create table if not exists public.stores (
   store_logo text not null default '',
   products jsonb not null default '[]'::jsonb,
   visits integer not null default 0,
+  cart_enabled boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -29,6 +30,8 @@ alter table public.stores enable row level security;
 ```
 
 No browser policies are required because the app writes through the server with the service role key.
+
+For deployments created before the per-store cart toggle existed, run `db/stores-cart-enabled.sql` once to add the `cart_enabled` column.
 
 ## 2. Deploy the Backend to Cloud Run
 

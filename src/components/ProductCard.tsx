@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Plus, Minus, ShoppingCart, ArrowRight, CornerDownLeft, Info, RefreshCw, Flame } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, ArrowRight, CornerDownLeft, Info, RefreshCw, Flame, Barcode } from 'lucide-react';
 import { Product } from '../types';
 import { STORE_CATEGORIES } from '../data/products';
 
@@ -13,6 +13,9 @@ interface ProductCardProps {
   onAddToCart: (product: Product, quantity: number) => void;
   currentCartQty: number; // to see if product already there
   onDismiss: () => void;
+  // Store-level purchase-list toggle: when false the card is a pure price
+  // display with no quantity/cart controls.
+  cartEnabled?: boolean;
 }
 
 export function ProductCard({
@@ -20,6 +23,7 @@ export function ProductCard({
   onAddToCart,
   currentCartQty,
   onDismiss,
+  cartEnabled = true,
 }: ProductCardProps) {
   const [qty, setQty] = useState(1);
 
@@ -105,6 +109,7 @@ export function ProductCard({
         </p>
 
         {/* Quantity editor controller */}
+        {cartEnabled && (
         <div className="w-full border-t border-gray-200/50 mt-4 pt-4" id="qty-selector-panel">
           <span className="text-[11px] font-bold text-gray-600 block mb-2.5">حدد كمية الشراء:</span>
           {currentCartQty > 0 && (
@@ -132,24 +137,37 @@ export function ProductCard({
             </button>
           </div>
         </div>
+        )}
 
-        {/* Main interactive add / edit action button */}
-        <button
-          onClick={() => {
-            onAddToCart(product, qty);
-          }}
-          className={`w-full text-white font-bold text-xs py-3.5 px-6 rounded-2xl mt-4 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
-            currentCartQty > 0
-              ? 'bg-gray-900 hover:bg-black shadow-[0_4px_15px_rgba(0,0,0,0.2)]'
-              : 'bg-primary-dark hover:bg-primary-main shadow-[0_4px_15px_rgba(53,133,142,0.3)]'
-          }`}
-          id="btn-add-product-to-cart"
-        >
-          <ShoppingCart className="w-4 h-4" />
-          <span>
-            {currentCartQty > 0 ? 'إضافة الكمية للسلة' : 'تأكيد وإضافة للسلة'}
-          </span>
-        </button>
+        {/* Main interactive action: add to cart, or back to scanning when the
+            store runs in price-checker mode (cart disabled) */}
+        {cartEnabled ? (
+          <button
+            onClick={() => {
+              onAddToCart(product, qty);
+            }}
+            className={`w-full text-white font-bold text-xs py-3.5 px-6 rounded-2xl mt-4 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
+              currentCartQty > 0
+                ? 'bg-gray-900 hover:bg-black shadow-[0_4px_15px_rgba(0,0,0,0.2)]'
+                : 'bg-primary-dark hover:bg-primary-main shadow-[0_4px_15px_rgba(53,133,142,0.3)]'
+            }`}
+            id="btn-add-product-to-cart"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            <span>
+              {currentCartQty > 0 ? 'إضافة الكمية للسلة' : 'تأكيد وإضافة للسلة'}
+            </span>
+          </button>
+        ) : (
+          <button
+            onClick={onDismiss}
+            className="w-full text-white font-bold text-xs py-3.5 px-6 rounded-2xl mt-4 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer bg-primary-dark hover:bg-primary-main shadow-[0_4px_15px_rgba(53,133,142,0.3)]"
+            id="btn-continue-scanning"
+          >
+            <Barcode className="w-4 h-4" />
+            <span>متابعة المسح</span>
+          </button>
+        )}
       </div>
     </div>
   );

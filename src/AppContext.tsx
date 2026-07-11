@@ -50,7 +50,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
              ...prev,
              name: storeData.storeName,
              logoUrl: storeData.storeLogo || null,
-             visits: storeData.visits || prev.visits
+             visits: storeData.visits || prev.visits,
+             cartEnabled: storeData.cartEnabled !== false
            }));
         }
       }
@@ -104,6 +105,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             name: storeData.storeName,
             logoUrl: storeData.storeLogo || null,
             visits: storeData.visits ?? prev.visits,
+            cartEnabled: storeData.cartEnabled !== false,
           }));
         }
       }
@@ -121,7 +123,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         ...prev,
         name: storeData.storeName,
         logoUrl: storeData.storeLogo || null,
-        visits: storeData.visits ?? prev.visits
+        visits: storeData.visits ?? prev.visits,
+        cartEnabled: storeData.cartEnabled !== false
       }));
     }
     // Catalog no longer travels over realtime; products are fetched per-scan.
@@ -185,7 +188,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const res = await fetch('/api/admin/store', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ storeName: newSettings.name, storeLogo: newSettings.logoUrl })
+        body: JSON.stringify({ storeName: newSettings.name, storeLogo: newSettings.logoUrl, cartEnabled: newSettings.cartEnabled !== false })
       });
       if (!res.ok) throw new Error('save failed');
     } catch {

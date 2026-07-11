@@ -31,5 +31,7 @@ export interface StoreSettings {
   name: string;
   logoUrl: string | null;
   visits?: number;
+  // Purchase-list (cart) toggle. Undefined means enabled.
+  cartEnabled?: boolean;
 }
 
